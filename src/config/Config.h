@@ -33,7 +33,7 @@ struct Config {
     //               fallback timeout if a release packet is lost).
     //   cooldownMs = informational post-pulse coast window; does NOT gate
     //                user input.
-    uint16_t steeringPulseMs    = 400;  // open-loop max hold window
+    uint16_t steeringPulseMs    = 600;  // open-loop max hold window
     uint16_t steeringCooldownMs = 120;  // post-pulse coast (informational)
     uint8_t  defaultDrivePwm    = 200;  // 0..255
     uint8_t  defaultSteerPwm    = 220;  // 0..255
@@ -48,6 +48,16 @@ struct Config {
     //                    false -> AP stays up alongside STA (AP_STA mode)
     //                    so the laptop/phone that provisioned stays on it.
     bool     apShutdownAfterProvision = true;
+
+    // Optional shared-secret token. When non-empty, WebSocket `cmd` frames
+    // must carry this in the `hello` handshake (`{t:"hello", token:"..."}`)
+    // before commands are accepted. Empty (default) = auth disabled, fine
+    // for a home LAN.
+    String   controlToken;
+
+    // Verbose log verbosity for the serial CLI / debug channel.
+    // 0=off, 1=error, 2=warn, 3=info (default), 4=debug.
+    uint8_t  logLevel = 3;
 
     // Safety
     uint16_t heartbeatTimeoutMs = 800;  // motors stop if no command within

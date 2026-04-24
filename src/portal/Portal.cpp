@@ -33,6 +33,12 @@ bool parseIp(const String& s, IPAddress& out) {
 
 void Portal::begin(const PortalDeps& deps) {
     deps_ = deps;
+    // CORS: same-origin is fine for the built-in portal, but a
+    // mobile/web app hosted elsewhere needs these headers on every
+    // /api/* response. Install them globally before routes register.
+    DefaultHeaders::Instance().addHeader("Access-Control-Allow-Origin",  "*");
+    DefaultHeaders::Instance().addHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+    DefaultHeaders::Instance().addHeader("Access-Control-Allow-Headers", "Content-Type");
     registerRoutes();
     server_.begin();
 }
@@ -52,6 +58,14 @@ void Portal::registerRoutes() {
                [this](AsyncWebServerRequest* r) { handleGetConfig(r); });
     server_.on("/api/wifi/scan",     HTTP_GET,
                [this](AsyncWebServerRequest* r) { handleWifiScan(r); });
+    server_.on("/api/schema",        HTTP_GET,
+               [this](AsyncWebServerRequest* r) { handleSchema(r); });
+
+    // CORS preflight — browsers send this before any non-"simple" POST
+    // (our application/json POSTs all qualify). Return the headers and a
+    // 204 so the real request proceeds.
+    server_.on("/api/*",             HTTP_OPTIONS,
+               [](AsyncWebServerRequest* r) { r->send(204); });
 
     server_.on("/api/reboot",        HTTP_POST,
                [this](AsyncWebServerRequest* r) { handleReboot(r); });
@@ -140,6 +154,8 @@ void Portal::handleGetConfig(AsyncWebServerRequest* req) {
     doc["driveInverted"]      = c.driveInverted;
     doc["steerInverted"]      = c.steerInverted;
     doc["apShutdownAfterProvision"] = c.apShutdownAfterProvision;
+    doc["controlToken"]       = c.controlToken;
+    doc["logLevel"]           = c.logLevel;
     sendJsonDoc(req, 200, doc);
 }
 
@@ -166,6 +182,8 @@ void Portal::handlePostConfig(AsyncWebServerRequest* req, JsonVariant& body) {
     if (body["steerInverted"].is<bool>())     c.steerInverted      = body["steerInverted"].as<bool>();
     if (body["apShutdownAfterProvision"].is<bool>())
         c.apShutdownAfterProvision = body["apShutdownAfterProvision"].as<bool>();
+    if (body["controlToken"].is<const char*>()) c.controlToken = body["controlToken"].as<const char*>();
+    if (body["logLevel"].is<int>()) c.logLevel = (uint8_t)constrain((int)body["logLevel"], 0, 4);
 
     const bool ok = saveConfig(c);
 
@@ -284,6 +302,60 @@ void Portal::handleResetFactory(AsyncWebServerRequest* req) {
     sendJsonDoc(req, 200, doc);
     delay(200);
     ESP.restart();
+}
+
+void Portal::handleSchema(AsyncWebServerRequest* req) {
+    // Static protocol/config description that a mobile or web client can
+    // fetch to build UI without hard-coding enums. Bumping kProtocolVersion
+    // in WsServer.h is the forward-compat signal.
+    JsonDocument doc;
+    doc["proto"]    = 1;
+    doc["device"]   = "smartrc-esp32";
+    auto tr = doc["transports"].to<JsonArray>();
+    tr.add("http");
+    tr.add("ws");
+    doc["ws"]       = "/ws";
+
+    auto cmds = doc["commands"].to<JsonArray>();
+    struct { const char* action; const char* takes; } kCmds[] = {
+        {"forward",     "speed"}, {"reverse",     "speed"},
+        {"stop",        nullptr}, {"brake",       nullptr},
+        {"left",        "speed"}, {"right",       "speed"},
+        {"steer_stop",  nullptr},
+        {"estop",       nullptr}, {"clear_estop", nullptr},
+    };
+    for (auto& k : kCmds) {
+        JsonObject o = cmds.add<JsonObject>();
+        o["action"] = k.action;
+        if (k.takes) o["takes"] = k.takes;
+    }
+
+    auto evs = doc["events"].to<JsonArray>();
+    for (auto* k : { "estop_latched", "estop_cleared",
+                     "stale_timeout", "stale_cleared",
+                     "net_mode_changed" }) {
+        JsonObject o = evs.add<JsonObject>();
+        o["kind"] = k;
+    }
+
+    auto streams = doc["streams"].to<JsonArray>();
+    JsonObject st = streams.add<JsonObject>();
+    st["name"] = "telemetry";
+    st["hzMin"] = 1; st["hzMax"] = 50; st["hzDefault"] = 20;
+
+    auto cfg = doc["configRanges"].to<JsonObject>();
+    cfg["steeringPulseMs"]["min"]    = 50;
+    cfg["steeringPulseMs"]["max"]    = 2000;
+    cfg["steeringCooldownMs"]["min"] = 0;
+    cfg["steeringCooldownMs"]["max"] = 2000;
+    cfg["defaultDrivePwm"]["min"]    = 0;
+    cfg["defaultDrivePwm"]["max"]    = 255;
+    cfg["defaultSteerPwm"]["min"]    = 0;
+    cfg["defaultSteerPwm"]["max"]    = 255;
+    cfg["heartbeatTimeoutMs"]["min"] = 50;
+    cfg["heartbeatTimeoutMs"]["max"] = 60000;
+
+    sendJsonDoc(req, 200, doc);
 }
 
 void Portal::handleNotFound(AsyncWebServerRequest* req) {

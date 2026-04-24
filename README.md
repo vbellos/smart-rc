@@ -161,6 +161,66 @@ and returns HTTP 409:
 Nothing is saved unless the connection actually succeeds — which means
 you can't brick provisioning by entering a wrong password.
 
+### `GET /api/schema`
+
+Static description of the current wire protocol — commands, events,
+telemetry streams, config ranges. Useful for mobile/web apps that want to
+build their UI dynamically instead of hard-coding enums. Bump
+`WsServer::kProtocolVersion` when anything in here changes incompatibly.
+
+### WebSocket  `ws://<host>/ws`
+
+Same :80 listener, same origin as the REST API. For realtime control and
+a live telemetry stream. Messages are single-frame JSON envelopes shaped
+`{t:"<type>", ...}`.
+
+**Client → device**
+
+```json
+{ "t":"hello", "token":"..." }            // handshake (token optional)
+{ "t":"hb" }                              // bare heartbeat
+{ "t":"cmd", "action":"forward", "speed":200, "id":42 }
+{ "t":"sub",   "streams":["telemetry"], "hz":20 }
+{ "t":"unsub", "streams":["telemetry"] }
+{ "t":"ping", "id":7 }
+```
+
+**Device → client**
+
+```json
+{ "t":"hello", "proto":1, "device":"smartrc-esp32",
+  "features":["drive","steer","estop","sensors_stub"],
+  "authRequired":false }
+
+{ "t":"telemetry", "ts":12345,
+  "drive":{"moving":true},
+  "steer":{"state":1,"lastDir":1},
+  "safety":{"emergency":false,"stale":false},
+  "net":{"mode":1,"rssi":-49} }
+
+{ "t":"event", "kind":"estop_latched",  "ts":12345 }
+{ "t":"event", "kind":"stale_timeout",  "ts":12345 }
+{ "t":"event", "kind":"net_mode_changed", "ts":12345 }
+
+{ "t":"ack",  "id":42, "ok":true,  "reason":"forward" }
+{ "t":"pong", "id":7 }
+{ "t":"err",  "code":"unauth", "detail":null }
+```
+
+- `cmd` frames route through `CommandHandler::execute()` — the same
+  chokepoint HTTP `/api/control` uses. Safety heartbeat ticks once per
+  accepted command regardless of transport.
+- `hb` frames refresh the safety watchdog without moving the motors —
+  useful for idle clients that want to keep the connection "alive" in the
+  safety sense without issuing commands.
+- Each client subscribes independently (`sub`/`unsub`) with its own Hz
+  (1–50, default 20). Frames are dropped silently when the client's
+  TCP send queue is full — telemetry is idempotent, next tick has
+  fresher data.
+- When `Config.controlToken` is non-empty, clients must pass it in the
+  `hello` frame; unauthenticated `cmd` frames return `{"t":"err",
+  "code":"unauth"}`.
+
 ### Reset / reboot
 
 | Endpoint                | Effect                                          |
@@ -190,6 +250,32 @@ new host-testable module, drop its `.cpp` into `build_src_filter` in
 For on-device tests, create `test/test_<name>/test_<name>.cpp` and run
 `pio test` (the device env runs Unity over the serial link). The native
 test directory is excluded from the device build via `test_ignore`.
+
+### Serial CLI
+
+Open the monitor (`pio device monitor`) — every boot prints a `smartrc>`
+prompt. Useful when Wi-Fi is broken, for bench testing, or for poking
+config without a browser.
+
+```
+smartrc> help                       list commands
+smartrc> status                     runtime status
+smartrc> config                     dump NVS config
+smartrc> fwd 200                    drive forward at PWM 200
+smartrc> left                       steer left pulse
+smartrc> steer_stop                 release steering motor
+smartrc> estop / clear              latch / release emergency
+smartrc> scan                       Wi-Fi scan
+smartrc> connect MyWifi hunter2     try & save on success
+smartrc> netreset                   wipe Wi-Fi creds only
+smartrc> factory                    full NVS wipe + reboot
+smartrc> reboot                     soft reset
+smartrc> log 4                      debug-level log (persists)
+smartrc> token <secret> | clear     set / clear WS auth token
+```
+
+All commands go through `CommandHandler::execute()` — the same chokepoint
+as HTTP and WebSocket.
 
 ---
 

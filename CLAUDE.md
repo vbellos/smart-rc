@@ -50,9 +50,15 @@ main.cpp
   │    └─ Steering (front, channel A, FSM)     src/motors/
   ├─ Safety (heartbeat watchdog + e-stop)      src/control/
   ├─ CommandHandler (single command funnel)    src/control/
-  ├─ NetworkManager (STA → AP fallback)        src/network/
-  ├─ Portal (WebServer + JSON API + HTML)      src/portal/
+  ├─ NetworkManager (STA → AP fallback, mDNS)  src/network/
+  ├─ Portal    (HTTP + JSON API + HTML)        src/portal/
+  ├─ WsServer  (WebSocket realtime/telemetry)  src/transport/
+  ├─ SerialCli (USB serial debug console)     src/transport/
   └─ Sensors (intentional empty stub)          src/sensors/
+
+Transports (Portal / WsServer / SerialCli) are peers: each is a thin
+adapter that calls CommandHandler::execute() — nothing else touches the
+motor classes directly.
 ```
 
 Key invariants — preserve when modifying:

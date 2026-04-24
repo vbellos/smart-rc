@@ -18,6 +18,11 @@ void NetworkManager::begin(const Config& cfg) {
     WiFi.persistent(false);
     WiFi.setAutoReconnect(true);
     WiFi.setHostname(hostname_.c_str());
+    // Modem sleep introduces ~100-300ms latency spikes during beacon
+    // intervals — fine for IoT telemetry, fatal for an RC where a brief
+    // gap causes visible motor dropouts mid-command. We're cable-powered,
+    // so trade a few mA for consistent low-latency packets.
+    WiFi.setSleep(false);
 
     if (cfg.wifiSsid.length() && tryConnectSta()) {
         mode_ = NetMode::Sta;
