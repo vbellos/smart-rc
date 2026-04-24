@@ -47,6 +47,7 @@ private:
     void handleReboot         (AsyncWebServerRequest* req);
     void handleResetNetwork   (AsyncWebServerRequest* req);
     void handleResetFactory   (AsyncWebServerRequest* req);
+    void handleImuCalibrate   (AsyncWebServerRequest* req);
     void handleNotFound       (AsyncWebServerRequest* req);
 
     // JSON-body POST handlers: the async JSON helper delivers the parsed body.

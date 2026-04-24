@@ -10,6 +10,7 @@
 #include "motors/Steering.h"
 #include "network/NetworkManager.h"
 #include "portal/PortalHtml.h"
+#include "sensors/Sensors.h"
 
 namespace smartrc {
 
@@ -73,6 +74,8 @@ void Portal::registerRoutes() {
                [this](AsyncWebServerRequest* r) { handleResetNetwork(r); });
     server_.on("/api/reset/factory", HTTP_POST,
                [this](AsyncWebServerRequest* r) { handleResetFactory(r); });
+    server_.on("/api/imu/calibrate", HTTP_POST,
+               [this](AsyncWebServerRequest* r) { handleImuCalibrate(r); });
 
     // ---- JSON-body POSTs ---------------------------------------------------
     // AsyncCallbackJsonWebHandler buffers the chunked body, parses once, and
@@ -130,6 +133,9 @@ void Portal::handleStatus(AsyncWebServerRequest* req) {
     safety["emergency"] = deps_.safety->isEmergency();
     safety["stale"]     = deps_.safety->isStale();
 
+    // Let every wired sensor contribute under `sensors.*`.
+    sensors::appendSensorsJson(doc.as<JsonObject>());
+
     sendJsonDoc(req, 200, doc);
 }
 
@@ -156,6 +162,9 @@ void Portal::handleGetConfig(AsyncWebServerRequest* req) {
     doc["apShutdownAfterProvision"] = c.apShutdownAfterProvision;
     doc["controlToken"]       = c.controlToken;
     doc["logLevel"]           = c.logLevel;
+    doc["imuInvertX"]         = c.imuInvertX;
+    doc["imuInvertY"]         = c.imuInvertY;
+    doc["imuInvertZ"]         = c.imuInvertZ;
     sendJsonDoc(req, 200, doc);
 }
 
@@ -184,6 +193,9 @@ void Portal::handlePostConfig(AsyncWebServerRequest* req, JsonVariant& body) {
         c.apShutdownAfterProvision = body["apShutdownAfterProvision"].as<bool>();
     if (body["controlToken"].is<const char*>()) c.controlToken = body["controlToken"].as<const char*>();
     if (body["logLevel"].is<int>()) c.logLevel = (uint8_t)constrain((int)body["logLevel"], 0, 4);
+    if (body["imuInvertX"].is<bool>()) c.imuInvertX = body["imuInvertX"].as<bool>();
+    if (body["imuInvertY"].is<bool>()) c.imuInvertY = body["imuInvertY"].as<bool>();
+    if (body["imuInvertZ"].is<bool>()) c.imuInvertZ = body["imuInvertZ"].as<bool>();
 
     const bool ok = saveConfig(c);
 
@@ -195,6 +207,7 @@ void Portal::handlePostConfig(AsyncWebServerRequest* req, JsonVariant& body) {
     deps_.drive->setDefaultPwm(c.defaultDrivePwm);
     deps_.drive->setInverted(c.driveInverted);
     deps_.safety->setTimeout(c.heartbeatTimeoutMs);
+    sensors::setImuInverts(c.imuInvertX, c.imuInvertY, c.imuInvertZ);
 
     JsonDocument resp;
     resp["ok"]      = ok;
@@ -355,6 +368,16 @@ void Portal::handleSchema(AsyncWebServerRequest* req) {
     cfg["heartbeatTimeoutMs"]["min"] = 50;
     cfg["heartbeatTimeoutMs"]["max"] = 60000;
 
+    sendJsonDoc(req, 200, doc);
+}
+
+void Portal::handleImuCalibrate(AsyncWebServerRequest* req) {
+    // Blocks the HTTP task for ~2.4 s while we resample — small price for
+    // a one-shot action. Motor/safety loop stays fluid on the other task.
+    sensors::recalibrateImu();
+    JsonDocument doc;
+    doc["ok"]      = true;
+    doc["message"] = "gyro bias re-sampled";
     sendJsonDoc(req, 200, doc);
 }
 

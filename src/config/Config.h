@@ -43,6 +43,15 @@ struct Config {
     bool     driveInverted      = false;
     bool     steerInverted      = false;
 
+    // IMU mount-orientation fix. Flip a given axis' sign (applied to both
+    // accel and gyro for that axis) so the firmware reports values
+    // relative to the vehicle's frame regardless of how the MPU6050
+    // breakout physically sits on the chassis.
+    //   X = forward/back   Y = left/right   Z = up/down
+    bool     imuInvertX         = false;
+    bool     imuInvertY         = false;
+    bool     imuInvertZ         = false;
+
     // Controls whether the AP hotspot is torn down after a successful
     // Wi-Fi provision. true  -> AP closes once STA is verified (default).
     //                    false -> AP stays up alongside STA (AP_STA mode)

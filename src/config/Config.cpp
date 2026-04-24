@@ -46,6 +46,9 @@ void loadConfig(Config& out) {
     out.apShutdownAfterProvision = p.getBool("ap_sdn", true);
     out.controlToken             = p.getString("ctl_tok", "");
     out.logLevel                 = p.getUChar("log_lvl", 3);
+    out.imuInvertX               = p.getBool("imu_invx", false);
+    out.imuInvertY               = p.getBool("imu_invy", false);
+    out.imuInvertZ               = p.getBool("imu_invz", false);
 
     p.end();
 }
@@ -76,6 +79,9 @@ bool saveConfig(const Config& cfg) {
     p.putBool  ("ap_sdn", cfg.apShutdownAfterProvision);
     p.putString("ctl_tok", cfg.controlToken);
     p.putUChar ("log_lvl", cfg.logLevel);
+    p.putBool  ("imu_invx", cfg.imuInvertX);
+    p.putBool  ("imu_invy", cfg.imuInvertY);
+    p.putBool  ("imu_invz", cfg.imuInvertZ);
 
     p.end();
     return true;

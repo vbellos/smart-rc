@@ -6,6 +6,7 @@
 #include "motors/Drive.h"
 #include "motors/Steering.h"
 #include "network/NetworkManager.h"
+#include "sensors/Sensors.h"
 
 namespace smartrc {
 
@@ -230,6 +231,10 @@ void WsServer::buildTelemetryJson(JsonDocument& doc) {
     auto net = doc["net"].to<JsonObject>();
     net["mode"] = (int)deps_.network->mode();
     net["rssi"] = deps_.network->rssi();
+
+    // Sensor payload (IMU today, more to come). Same shape as /api/status
+    // so the app can render either stream with one code path.
+    sensors::appendSensorsJson(doc.as<JsonObject>());
 }
 
 void WsServer::pushTelemetry() {

@@ -1,11 +1,15 @@
 #include "transport/SerialCli.h"
 
+#include <Wire.h>
+
 #include "config/Config.h"
 #include "control/CommandHandler.h"
 #include "control/Safety.h"
 #include "motors/Drive.h"
 #include "motors/Steering.h"
 #include "network/NetworkManager.h"
+#include "sensors/Sensors.h"
+#include "sensors/Mpu6050.h"
 
 namespace smartrc {
 
@@ -102,7 +106,10 @@ void SerialCli::printHelp() {
         "  factory                    full NVS wipe & reboot\n"
         "  reboot                     soft reset\n"
         "  log <0..4>                 set log verbosity (persists)\n"
-        "  token [<new> | clear]      show / set / clear controlToken\n");
+        "  token [<new> | clear]      show / set / clear controlToken\n"
+        "  i2c scan                   probe I2C bus for devices\n"
+        "  imu                        print current IMU reading\n"
+        "  imu calibrate              re-sample gyro bias (hold still ~2s)\n");
 }
 
 void SerialCli::processLine(const String& line) {
@@ -138,6 +145,12 @@ void SerialCli::processLine(const String& line) {
 
     else if (cmd == "log")        cmdLogLevel(tok, n);
     else if (cmd == "token")      cmdToken(tok, n);
+
+    else if (cmd == "i2c" && n >= 2 && tok[1] == "scan") cmdI2cScan();
+    else if (cmd == "imu" && n >= 2 && tok[1] == "calibrate") {
+        smartrc::sensors::recalibrateImu();
+    }
+    else if (cmd == "imu")        cmdImu();
 
     else                          Serial.printf("unknown: %s (type 'help')\n", cmd.c_str());
 
@@ -282,6 +295,43 @@ void SerialCli::cmdLogLevel(const String* argv, int argc) {
     deps_.config->logLevel = (uint8_t)v;
     saveConfig(*deps_.config);
     Serial.printf("logLevel=%u (saved)\n", (unsigned)v);
+}
+
+void SerialCli::cmdI2cScan() {
+    Serial.println("scanning I2C bus 0x08..0x77...");
+    int count = 0;
+    for (uint8_t addr = 0x08; addr <= 0x77; ++addr) {
+        Wire.beginTransmission(addr);
+        const uint8_t err = Wire.endTransmission();
+        if (err == 0) {
+            Serial.printf("  0x%02X  %s\n", addr,
+                          addr == 0x68 ? "(MPU6050)" :
+                          addr == 0x69 ? "(MPU6050 alt)" : "");
+            ++count;
+        }
+    }
+    Serial.printf("(%d device%s found)\n", count, count == 1 ? "" : "s");
+}
+
+void SerialCli::cmdImu() {
+    const smartrc::sensors::Mpu6050& m = smartrc::sensors::imu();
+    if (!m.present()) {
+        Serial.println("IMU not present (failed init — try 'i2c scan')");
+        return;
+    }
+    const auto& s = m.last();
+    Serial.printf("accel (m/s^2)  x=%+7.3f  y=%+7.3f  z=%+7.3f\n",
+                  s.ax, s.ay, s.az);
+    Serial.printf("gyro  (deg/s)  x=%+7.3f  y=%+7.3f  z=%+7.3f\n",
+                  s.gx, s.gy, s.gz);
+    Serial.printf("temp          %.2f degC    valid=%d    age=%lu ms\n",
+                  s.temperature_c, (int)s.valid,
+                  (unsigned long)(millis() - s.ts_ms));
+    Serial.printf("inverts        x=%d y=%d z=%d\n",
+                  (int)m.invertX(), (int)m.invertY(), (int)m.invertZ());
+    Serial.printf("gyro bias     x=%+6.2f y=%+6.2f z=%+6.2f deg/s  (cal=%d)\n",
+                  m.gyroBiasDps(0), m.gyroBiasDps(1), m.gyroBiasDps(2),
+                  (int)m.gyroCalibrated());
 }
 
 void SerialCli::cmdToken(const String* argv, int argc) {

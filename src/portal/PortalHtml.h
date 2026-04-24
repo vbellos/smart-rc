@@ -110,6 +110,11 @@ inline const char PORTAL_HTML[] = R"HTML(<!doctype html>
       <label><input type="checkbox" name="steerInverted"> Invert steering direction</label>
     </div>
     <div class="invert-row">
+      <label><input type="checkbox" name="imuInvertX"> Invert IMU X (fwd/back)</label>
+      <label><input type="checkbox" name="imuInvertY"> Invert IMU Y (left/right)</label>
+      <label><input type="checkbox" name="imuInvertZ"> Invert IMU Z (up/down)</label>
+    </div>
+    <div class="invert-row">
       <label><input type="checkbox" name="apShutdownAfterProvision">
         Close AP hotspot after successful Wi-Fi provision
       </label>

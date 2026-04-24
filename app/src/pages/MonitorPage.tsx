@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { PageHeader, ConnectionBadge } from '../components/Layout'
 import { StatCard } from '../components/StatCard'
 import { ChartCard, type ChartSeries } from '../components/Chart'
@@ -130,9 +130,12 @@ export default function MonitorPage() {
       <section className="mb-8">
         <div className="flex items-baseline justify-between mb-3">
           <h2 className="caption">Sensors</h2>
-          <span className="text-[11px] text-ink-500">
-            from <code className="text-ink-300">sensors::appendStatusJson()</code>
-          </span>
+          <div className="flex items-center gap-2">
+            <CalibrateImuButton hasImu={imuData != null} />
+            <span className="text-[11px] text-ink-500">
+              from <code className="text-ink-300">sensors::appendSensorsJson()</code>
+            </span>
+          </div>
         </div>
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
           <IMUCard title="Gyro" axes={imuSeries} unit="°/s" icon={<Compass className="size-4"/>} />
@@ -251,6 +254,36 @@ function DistanceCard({ series, data }: {
       min={0} max={300}
       fill
     />
+  )
+}
+
+function CalibrateImuButton({ hasImu }: { hasImu: boolean }) {
+  const { api } = useDevice()
+  const [busy, setBusy] = useState(false)
+  const [toast, setToast] = useState<string | null>(null)
+  if (!hasImu) return null
+
+  async function run() {
+    if (!api) return
+    setBusy(true); setToast('Hold still \u2014 sampling bias...')
+    try {
+      const r = await api.calibrateImu()
+      setToast(r.ok ? '\u2713 Gyro bias re-sampled' : 'Failed')
+    } catch (e) {
+      setToast(`Failed: ${e}`)
+    } finally {
+      setBusy(false)
+      setTimeout(() => setToast(null), 4000)
+    }
+  }
+  return (
+    <>
+      <button onClick={run} disabled={busy}
+        className="pill pill-muted hover:text-white disabled:opacity-50">
+        {busy ? 'Calibrating\u2026' : 'Recalibrate gyro'}
+      </button>
+      {toast && <span className="text-[11px] text-ink-300">{toast}</span>}
+    </>
   )
 }
 
