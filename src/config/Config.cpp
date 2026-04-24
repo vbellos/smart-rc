@@ -36,7 +36,7 @@ void loadConfig(Config& out) {
     out.staticSubnet   = u32ToIp(p.getUInt("mask", 0xFFFFFF00U));  // /24
     out.staticDns      = u32ToIp(p.getUInt("dns",  0));
 
-    out.steeringPulseMs    = p.getUShort("st_ms",   400);
+    out.steeringPulseMs    = p.getUShort("st_ms",   600);
     out.steeringCooldownMs = p.getUShort("st_cd",   120);
     out.defaultDrivePwm    = p.getUChar ("dr_pwm",  200);
     out.defaultSteerPwm    = p.getUChar ("st_pwm",  220);
@@ -44,6 +44,8 @@ void loadConfig(Config& out) {
     out.driveInverted      = p.getBool  ("dr_inv",  false);
     out.steerInverted      = p.getBool  ("st_inv",  false);
     out.apShutdownAfterProvision = p.getBool("ap_sdn", true);
+    out.controlToken             = p.getString("ctl_tok", "");
+    out.logLevel                 = p.getUChar("log_lvl", 3);
 
     p.end();
 }
@@ -72,6 +74,8 @@ bool saveConfig(const Config& cfg) {
     p.putBool  ("dr_inv", cfg.driveInverted);
     p.putBool  ("st_inv", cfg.steerInverted);
     p.putBool  ("ap_sdn", cfg.apShutdownAfterProvision);
+    p.putString("ctl_tok", cfg.controlToken);
+    p.putUChar ("log_lvl", cfg.logLevel);
 
     p.end();
     return true;

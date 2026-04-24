@@ -58,7 +58,7 @@ private:
     Dir          dir_        = Dir::None;
     Dir          lastDir_    = Dir::None;
     uint32_t     stateStartMs_ = 0;
-    uint16_t     pulseMs_    = 400;
+    uint16_t     pulseMs_    = 600;
     uint16_t     cooldownMs_ = 120;
     uint8_t      defaultPwm_ = 220;
     bool         inverted_   = false;

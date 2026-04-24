@@ -31,6 +31,10 @@ public:
     // its own FreeRTOS task, so this is a no-op after the async migration.
     void handle();
 
+    // Exposed so other transports (e.g. WsServer) can add their own handlers
+    // onto the same :80 listener — one port, one origin, one CORS story.
+    AsyncWebServer& server() { return server_; }
+
 private:
     void registerRoutes();
 
@@ -38,6 +42,7 @@ private:
     void handleRoot           (AsyncWebServerRequest* req);
     void handleStatus         (AsyncWebServerRequest* req);
     void handleGetConfig      (AsyncWebServerRequest* req);
+    void handleSchema         (AsyncWebServerRequest* req);
     void handleWifiScan       (AsyncWebServerRequest* req);
     void handleReboot         (AsyncWebServerRequest* req);
     void handleResetNetwork   (AsyncWebServerRequest* req);

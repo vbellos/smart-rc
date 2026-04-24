@@ -36,10 +36,14 @@ inline const char PORTAL_HTML[] = R"HTML(<!doctype html>
   .invert-row { display: flex; gap: 1em; margin-top: 0.4em; font-size: 0.9em; }
   .invert-row label { display: inline-flex; align-items: center; gap: 0.3em; margin: 0; }
   .invert-row input { width: auto; }
+  #wsBadge { display:inline-block; padding:2px 6px; border-radius:4px;
+             font-size:0.8em; margin-left:0.5em; }
+  #wsBadge.on  { background:#d8f5e0; color:#176a2e; }
+  #wsBadge.off { background:#f9d6d6; color:#a11212; }
 </style>
 </head>
 <body>
-<h1>Smart RC</h1>
+<h1>Smart RC <span id="wsBadge" class="off">WS off</span> <span id="txRate" style="font-size:0.6em;color:#666"></span></h1>
 <div id="status"><pre>loading...</pre></div>
 
 <fieldset>
@@ -122,45 +126,201 @@ inline const char PORTAL_HTML[] = R"HTML(<!doctype html>
 </fieldset>
 
 <script>
-// Fire-and-forget command. We deliberately don't await refresh() here —
-// when a button is held at 5 Hz we don't want a refresh storm.
+// ---------------------------------------------------------------------------
+// WebSocket transport (Phase 2+). Opens on load, resubscribes telemetry on
+// reconnect, auto-falls-back to HTTP if it can't connect. Every helper is
+// designed so the UI works identically whether WS is up or down.
+// ---------------------------------------------------------------------------
+let ws = null;
+let wsReady = false;
+let wsRetryMs = 500;         // exponential backoff on reconnect
+let cmdId = 0;
+
+function setWsBadge(on, extra) {
+  const el = document.getElementById('wsBadge');
+  el.className = on ? 'on' : 'off';
+  el.textContent = on ? ('WS ' + (extra||'on')) : 'WS off';
+}
+
+function openWs() {
+  try {
+    const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+    ws = new WebSocket(`${proto}//${location.host}/ws`);
+  } catch (e) { setWsBadge(false); scheduleReconnect(); return; }
+
+  ws.addEventListener('open', () => {
+    wsReady = true; wsRetryMs = 500;
+    setWsBadge(true, '…');
+    // Handshake (no token for default config). Server will respond with
+    // its own hello frame including proto/features.
+    ws.send(JSON.stringify({t:'hello'}));
+    // Subscribe to telemetry stream.
+    ws.send(JSON.stringify({t:'sub', streams:['telemetry'], hz:10}));
+  });
+
+  ws.addEventListener('message', e => {
+    let msg; try { msg = JSON.parse(e.data); } catch { return; }
+    onWsMessage(msg);
+  });
+
+  ws.addEventListener('close', () => {
+    wsReady = false;
+    setWsBadge(false);
+    scheduleReconnect();
+  });
+
+  ws.addEventListener('error', () => {/* close will follow */});
+}
+
+function scheduleReconnect() {
+  setTimeout(openWs, wsRetryMs);
+  wsRetryMs = Math.min(wsRetryMs * 2, 8000);
+}
+
+function onWsMessage(msg) {
+  if (!msg || !msg.t) return;
+  switch (msg.t) {
+    case 'hello':
+      setWsBadge(true, `proto ${msg.proto}`);
+      break;
+    case 'telemetry':
+      renderStatusFromWs(msg);
+      break;
+    case 'event':
+      // Flash the status pane briefly on edge events.
+      console.log('[event]', msg.kind, msg);
+      break;
+    case 'ack':
+      // fire-and-forget, ignore
+      break;
+    case 'err':
+      console.warn('[ws err]', msg);
+      break;
+  }
+}
+
+function renderStatusFromWs(msg) {
+  // Decorate a friendly view — mirrors what /api/status returns for the
+  // shared fields, plus the WS timestamp for sanity-checking freshness.
+  const view = {
+    uptime_ms: msg.ts,
+    motors:  msg.drive && msg.steer ? {
+        drive_moving:   msg.drive.moving,
+        steer_state:    msg.steer.state,
+        steer_last_dir: msg.steer.lastDir,
+      } : undefined,
+    safety:  msg.safety,
+    net:     msg.net,
+    _via: 'ws',
+  };
+  document.querySelector('#status pre').textContent = JSON.stringify(view, null, 2);
+}
+
+// Rolling TX counter — lets us see at a glance whether commands are
+// actually leaving the browser. If motors drop mid-hold but this counter
+// stays solid, the issue is firmware/Wi-Fi side; if it drops, it's
+// something killing the JS timer (wake lock / tab throttling / event bug).
+let txCount = 0;
+setInterval(() => {
+  const el = document.getElementById('txRate');
+  if (el) el.textContent = txCount ? (txCount + '/s tx') : '';
+  txCount = 0;
+}, 1000);
+
+// Fire-and-forget command. Prefers WS (single-digit-ms latency); falls
+// back to HTTP POST when the socket is down. Both paths land in the same
+// CommandHandler::execute() chokepoint on the device.
 function cmd(action, speed) {
+  txCount++;
+  if (wsReady && ws && ws.readyState === WebSocket.OPEN) {
+    const payload = {t:'cmd', action, id: ++cmdId};
+    if (speed) payload.speed = speed;
+    ws.send(JSON.stringify(payload));
+    return Promise.resolve({ok:true, via:'ws'});
+  }
   const body = JSON.stringify(speed ? {action, speed} : {action});
   return fetch('/api/control', {method:'POST',
     headers:{'Content-Type':'application/json'}, body}).catch(() => {});
 }
 
-// Press-and-hold: while the pointer is down on `btn`, resend `action` at
-// `repeatMs`. On release, optionally fire a single `releaseAction` command
-// to cut the motor instantly. Steering uses 'steer_stop' so the spring can
-// snap the wheels back without being fought by another pulse.
+// ---------------------------------------------------------------------------
+// Wake lock — keep the screen on while ANY control button is held. Without
+// this, mobile browsers throttle setInterval when the display dims and
+// commands stop being sent → motor drops out until display wakes.
+// ---------------------------------------------------------------------------
+let wakeLock = null;
+let activeHolds = 0;
+async function acquireWakeLock() {
+  activeHolds++;
+  if (wakeLock || !('wakeLock' in navigator)) return;
+  try { wakeLock = await navigator.wakeLock.request('screen'); }
+  catch (e) { /* no-op — permission denied or unsupported */ }
+}
+function maybeReleaseWakeLock() {
+  activeHolds = Math.max(0, activeHolds - 1);
+  if (activeHolds === 0 && wakeLock) {
+    wakeLock.release().catch(() => {});
+    wakeLock = null;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Press-and-hold: resend `action` at `repeatMs` while the button is held.
+// Uses Pointer Events + setPointerCapture so a drifting cursor / wobbling
+// finger CANNOT unbind the hold — the button "owns" the pointer until
+// pointerup/pointercancel. This fixes the "motor drops for a split second
+// even though I'm still holding" class of bug.
+// ---------------------------------------------------------------------------
 function bindHold(btn, action, opts) {
   opts = opts || {};
   const repeatMs      = opts.repeatMs      || 200;
   const releaseAction = opts.releaseAction || null;
   let timer = null;
+  let capturedPointerId = null;
+
   const start = e => {
-    e.preventDefault();
+    if (e && e.preventDefault) e.preventDefault();
     if (timer) return;
+    if (e && typeof e.pointerId === 'number' && btn.setPointerCapture) {
+      try { btn.setPointerCapture(e.pointerId); capturedPointerId = e.pointerId; }
+      catch (_) { /* ignore — some browsers refuse capture on primary click */ }
+    }
     cmd(action);
     timer = setInterval(() => cmd(action), repeatMs);
     btn.classList.add('held');
+    acquireWakeLock();
   };
-  const end = e => {
-    if (e) e.preventDefault();
+  const end = () => {
     if (!timer) return;
+    if (capturedPointerId !== null && btn.releasePointerCapture) {
+      try { btn.releasePointerCapture(capturedPointerId); } catch (_) {}
+      capturedPointerId = null;
+    }
     clearInterval(timer); timer = null;
     btn.classList.remove('held');
     if (releaseAction) cmd(releaseAction);
+    maybeReleaseWakeLock();
   };
-  btn.addEventListener('mousedown',   start);
-  btn.addEventListener('touchstart',  start, {passive:false});
-  btn.addEventListener('mouseup',     end);
-  btn.addEventListener('mouseleave',  end);
-  btn.addEventListener('touchend',    end);
-  btn.addEventListener('touchcancel', end);
-  // Release on tab hide / window blur — prevents a stuck throttle if the
-  // user alt-tabs while holding.
+
+  if ('PointerEvent' in window) {
+    btn.addEventListener('pointerdown',        start);
+    btn.addEventListener('pointerup',          end);
+    btn.addEventListener('pointercancel',      end);
+    btn.addEventListener('lostpointercapture', end);
+    // Note: we intentionally do NOT listen for pointerleave — setPointerCapture
+    // keeps events attached to btn even when the pointer moves away.
+  } else {
+    // Legacy fallback (very old browsers). No `mouseleave` here either —
+    // trade a stuck-throttle edge case for no drift-kill in the common case.
+    btn.addEventListener('mousedown',   start);
+    btn.addEventListener('touchstart',  start, {passive:false});
+    btn.addEventListener('mouseup',     end);
+    btn.addEventListener('touchend',    end);
+    btn.addEventListener('touchcancel', end);
+  }
+
+  // Belt-and-braces: release on tab hide / window blur so alt-tab doesn't
+  // leave the motor running at full throttle.
   window.addEventListener('blur',     end);
   document.addEventListener('visibilitychange',
     () => { if (document.hidden) end(); });
@@ -297,11 +457,16 @@ async function factoryReset() { if (confirm('FULL factory reset?'))
 //             center without the motor re-energising against it.
 bindHold(document.getElementById('btnFwd'),   'forward', {repeatMs: 200, releaseAction: 'stop'});
 bindHold(document.getElementById('btnRev'),   'reverse', {repeatMs: 200, releaseAction: 'stop'});
-bindHold(document.getElementById('btnLeft'),  'left',    {repeatMs: 150, releaseAction: 'steer_stop'});
-bindHold(document.getElementById('btnRight'), 'right',   {repeatMs: 150, releaseAction: 'steer_stop'});
+bindHold(document.getElementById('btnLeft'),  'left',    {repeatMs: 100, releaseAction: 'steer_stop'});
+bindHold(document.getElementById('btnRight'), 'right',   {repeatMs: 100, releaseAction: 'steer_stop'});
 
-loadCfg(); refresh();
-setInterval(refresh, 2000);
+loadCfg();
+// HTTP status polling as a fallback. Skipped once WS telemetry is live —
+// renderStatusFromWs() handles updates, and it's >10× more frequent.
+refresh();
+setInterval(() => { if (!wsReady) refresh(); }, 2000);
+
+openWs();
 </script>
 </body></html>
 )HTML";
