@@ -1,0 +1,56 @@
+#pragma once
+
+#include <ArduinoJson.h>
+#include <ESPAsyncWebServer.h>
+
+namespace smartrc {
+
+struct Config;
+class NetworkManager;
+class CommandHandler;
+class Drive;
+class Steering;
+class Safety;
+
+// Bundles all the dependencies the portal needs to render status,
+// edit config, and dispatch commands.
+struct PortalDeps {
+    Config*          config;
+    NetworkManager*  network;
+    CommandHandler*  commands;
+    Drive*           drive;
+    Steering*        steering;
+    Safety*          safety;
+};
+
+class Portal {
+public:
+    void begin(const PortalDeps& deps);
+
+    // Kept for API stability with main.cpp's loop(). AsyncWebServer runs on
+    // its own FreeRTOS task, so this is a no-op after the async migration.
+    void handle();
+
+private:
+    void registerRoutes();
+
+    // GET / body-less POST handlers: take only the request.
+    void handleRoot           (AsyncWebServerRequest* req);
+    void handleStatus         (AsyncWebServerRequest* req);
+    void handleGetConfig      (AsyncWebServerRequest* req);
+    void handleWifiScan       (AsyncWebServerRequest* req);
+    void handleReboot         (AsyncWebServerRequest* req);
+    void handleResetNetwork   (AsyncWebServerRequest* req);
+    void handleResetFactory   (AsyncWebServerRequest* req);
+    void handleNotFound       (AsyncWebServerRequest* req);
+
+    // JSON-body POST handlers: the async JSON helper delivers the parsed body.
+    void handlePostConfig     (AsyncWebServerRequest* req, JsonVariant& body);
+    void handleControl        (AsyncWebServerRequest* req, JsonVariant& body);
+    void handleWifiProvision  (AsyncWebServerRequest* req, JsonVariant& body);
+
+    PortalDeps      deps_{};
+    AsyncWebServer  server_{80};
+};
+
+}  // namespace smartrc
