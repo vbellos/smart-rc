@@ -61,6 +61,15 @@ export default function MonitorPage() {
   const batterySeries  = useTimeSeries(num(batteryData, 'voltage'), 240, 1000)
   const distanceSeries = useTimeSeries(num(distanceData, 'front'),  120, 500)
 
+  // Velocity diagnostics — the signal the brake uses to decide direction.
+  // Watch this while pushing the car forward/backward by hand to verify
+  // the IMU orientation is correctly set (see imuInvertX in Config).
+  const vxNow        = num(imuData, 'vx')
+  const axNow        = num(imuData, 'ax')
+  const stationary   = imuData != null && (imuData['stationary'] === true)
+  const vxSeries     = useTimeSeries(vxNow, 120, 200)
+  const axSeries     = useTimeSeries(axNow, 120, 200)
+
   return (
     <div>
       <PageHeader
@@ -100,6 +109,42 @@ export default function MonitorPage() {
           />
         </div>
       </section>
+
+      {/* ------- Motion diagnostics ---------------------------------------
+         Big signed display of the firmware's estimated forward velocity
+         (vx) + raw forward acceleration (ax). This is the signal the
+         active brake uses to pick direction. If pushing the car forward
+         makes the number go NEGATIVE, your IMU X axis is mirrored —
+         tick "Invert IMU X" in Config to correct it.
+         ----------------------------------------------------------------- */}
+      {imuData && (
+        <section className="mb-8">
+          <div className="flex items-baseline justify-between mb-3">
+            <h2 className="caption">Motion (brake reference)</h2>
+            <span className="text-[11px] text-ink-500">
+              push the car forward → vx should go{' '}
+              <span className="text-lime-400">positive</span>
+            </span>
+          </div>
+          <div className="grid gap-3 md:grid-cols-3">
+            <VelocityCard vx={vxNow ?? 0} stationary={stationary} />
+            <ChartCard
+              title="vx · integrated velocity"
+              series={[{ label: 'm/s', color: vxNow != null && vxNow < 0 ? 'rgb(244,63,94)' : 'rgb(163,230,53)', data: vxSeries }]}
+              unit="m/s"
+              windowLabel="last 24 s"
+              fill
+            />
+            <ChartCard
+              title="ax · forward acceleration"
+              series={[{ label: 'm/s²', color: 'rgb(56,189,248)', data: axSeries }]}
+              unit="m/s²"
+              windowLabel="last 24 s"
+              fill
+            />
+          </div>
+        </section>
+      )}
 
       {/* ------- Chart grid -------- */}
       <section className="mb-8">
@@ -254,6 +299,42 @@ function DistanceCard({ series, data }: {
       min={0} max={300}
       fill
     />
+  )
+}
+
+function VelocityCard({ vx, stationary }: { vx: number; stationary: boolean }) {
+  // Direction-first display. Color tells you at a glance which way the
+  // firmware thinks you're moving — compare with what you actually see.
+  const isStill = stationary || Math.abs(vx) < 0.05
+  const dir: 'fwd' | 'rev' | 'stop' = isStill ? 'stop' : vx > 0 ? 'fwd' : 'rev'
+  const color = dir === 'fwd' ? 'text-lime-400'
+              : dir === 'rev' ? 'text-rose-400'
+              : 'text-ink-300'
+  const ring  = dir === 'fwd' ? 'ring-lime-500/25'
+              : dir === 'rev' ? 'ring-rose-500/25'
+              : 'ring-[#26262e]'
+  const label = dir === 'fwd' ? '▲ FORWARD'
+              : dir === 'rev' ? '▼ REVERSE'
+              : '■ STOPPED'
+  return (
+    <div className={`card p-5 ring-1 ${ring}`}>
+      <div className="flex items-center justify-between">
+        <span className="caption">Velocity estimate</span>
+        <Compass className="size-4 text-ink-400"/>
+      </div>
+      <div className="mt-3 flex items-baseline gap-1.5">
+        <span className={`hero-num ${color}`}>
+          {vx >= 0 ? '+' : ''}{vx.toFixed(2)}
+        </span>
+        <span className="text-sm text-ink-400 font-medium">m/s</span>
+      </div>
+      <div className={`mt-3 pill ${dir === 'fwd' ? 'pill-ok' : dir === 'rev' ? 'pill-err' : 'pill-muted'}`}>
+        {label}
+      </div>
+      <div className="mt-2 text-xs text-ink-400">
+        Integrated from accelerometer X. Resets to 0 after ~1.5 s of quiescence.
+      </div>
+    </div>
   )
 }
 

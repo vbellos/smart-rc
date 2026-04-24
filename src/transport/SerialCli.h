@@ -65,6 +65,13 @@ private:
     void cmdToken(const String* argv, int argc);
     void cmdI2cScan();
     void cmdImu();
+    void cmdImuWatch(const String* argv, int argc);
+
+    // Background streaming state for `imu watch`.
+    bool     watchActive_  = false;
+    uint32_t watchStartMs_ = 0;
+    uint32_t watchEndMs_   = 0;
+    uint32_t watchNextMs_  = 0;
 
     SerialCliDeps deps_{};
     String        buf_;

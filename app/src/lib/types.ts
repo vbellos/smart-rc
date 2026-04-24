@@ -48,6 +48,11 @@ export interface DeviceConfig {
   apShutdownAfterProvision: boolean
   controlToken: string
   logLevel: number
+  imuInvertX: boolean
+  imuInvertY: boolean
+  imuInvertZ: boolean
+  activeBrakePwm: number
+  activeBrakeMaxMs: number
 }
 
 export interface WifiNetwork {

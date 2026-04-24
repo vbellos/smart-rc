@@ -40,6 +40,8 @@ void loadConfig(Config& out) {
     out.steeringCooldownMs = p.getUShort("st_cd",   120);
     out.defaultDrivePwm    = p.getUChar ("dr_pwm",  200);
     out.defaultSteerPwm    = p.getUChar ("st_pwm",  220);
+    out.activeBrakePwm     = p.getUChar ("ab_pwm",  220);
+    out.activeBrakeMaxMs   = p.getUShort("ab_max",  600);
     out.heartbeatTimeoutMs = p.getUShort("hb_ms",   1500);
     out.driveInverted      = p.getBool  ("dr_inv",  false);
     out.steerInverted      = p.getBool  ("st_inv",  false);
@@ -73,6 +75,8 @@ bool saveConfig(const Config& cfg) {
     p.putUShort("st_cd",  cfg.steeringCooldownMs);
     p.putUChar ("dr_pwm", cfg.defaultDrivePwm);
     p.putUChar ("st_pwm", cfg.defaultSteerPwm);
+    p.putUChar ("ab_pwm", cfg.activeBrakePwm);
+    p.putUShort("ab_max", cfg.activeBrakeMaxMs);
     p.putUShort("hb_ms",  cfg.heartbeatTimeoutMs);
     p.putBool  ("dr_inv", cfg.driveInverted);
     p.putBool  ("st_inv", cfg.steerInverted);

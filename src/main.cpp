@@ -60,6 +60,11 @@ void setup() {
     smartrc::sensors::setImuInverts(
         g_cfg.imuInvertX, g_cfg.imuInvertY, g_cfg.imuInvertZ);
 
+    // Drive's active-brake wants live IMU samples to detect "stopped".
+    g_drive.setImu(&smartrc::sensors::imu());
+    g_drive.setActiveBrakePwm(g_cfg.activeBrakePwm);
+    g_drive.setActiveBrakeMaxMs(g_cfg.activeBrakeMaxMs);
+
     // 6. Networking — STA with AP fallback.
     g_net.begin(g_cfg);
 
@@ -116,7 +121,8 @@ void loop() {
     g_portal.handle();     // no-op since async migration
     g_ws.update();         // telemetry push + event polling
     g_cli.update();        // serial console
+    smartrc::sensors::update();   // pump IMU before Drive reads velocity
+    g_drive.update();             // active-brake tick
     g_steering.update();
     g_safety.update();
-    smartrc::sensors::update();
 }
