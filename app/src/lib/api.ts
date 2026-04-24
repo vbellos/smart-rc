@@ -91,4 +91,13 @@ export class ApiClient {
   reboot() { return this.fetchJson('/api/reboot', { method: 'POST' }) }
   resetNetwork() { return this.fetchJson('/api/reset/network', { method: 'POST' }) }
   resetFactory() { return this.fetchJson('/api/reset/factory', { method: 'POST' }) }
+
+  /* --------- IMU --------- */
+
+  calibrateImu() {
+    return this.fetchJson<{ ok: boolean; message: string }>(
+      '/api/imu/calibrate',
+      { method: 'POST' }
+    )
+  }
 }

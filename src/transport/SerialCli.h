@@ -63,6 +63,8 @@ private:
     void cmdNetReset();
     void cmdLogLevel(const String* argv, int argc);
     void cmdToken(const String* argv, int argc);
+    void cmdI2cScan();
+    void cmdImu();
 
     SerialCliDeps deps_{};
     String        buf_;

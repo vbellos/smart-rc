@@ -18,4 +18,14 @@ constexpr uint32_t PWM_FREQ_HZ   = 20000; // above audible range
 constexpr uint8_t  PWM_RESOLUTION = 8;     // 0..255
 constexpr uint16_t PWM_MAX        = 255;
 
+// I²C bus shared by any sensor peripherals (MPU6050, future distance /
+// battery / power-monitor chips). Pulled-up on the breakout boards, so
+// no external pullups needed.
+constexpr uint8_t  I2C_SDA       = 10;
+constexpr uint8_t  I2C_SCL       = 11;
+constexpr uint32_t I2C_FREQ_HZ   = 400000;  // fast-mode; drop to 100000 if flaky
+
+// MPU6050 IMU — default address when AD0 is tied to GND.
+constexpr uint8_t  MPU6050_ADDR  = 0x68;
+
 }  // namespace pins

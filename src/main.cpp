@@ -1,6 +1,8 @@
 #include <Arduino.h>
 #include <ESPmDNS.h>
+#include <Wire.h>
 
+#include "Pins.h"
 #include "config/Config.h"
 #include "control/CommandHandler.h"
 #include "control/Safety.h"
@@ -51,8 +53,12 @@ void setup() {
     g_safety.begin(&g_drive, &g_steering, g_cfg.heartbeatTimeoutMs);
     g_commands.begin(&g_drive, &g_steering, &g_safety);
 
-    // 5. Sensors (stub).
+    // 5. I²C bus + sensors. Wire.begin() must run before sensors::begin()
+    //    because the MPU6050 driver talks over it during its probe.
+    Wire.begin(pins::I2C_SDA, pins::I2C_SCL, pins::I2C_FREQ_HZ);
     smartrc::sensors::begin();
+    smartrc::sensors::setImuInverts(
+        g_cfg.imuInvertX, g_cfg.imuInvertY, g_cfg.imuInvertZ);
 
     // 6. Networking — STA with AP fallback.
     g_net.begin(g_cfg);
