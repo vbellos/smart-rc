@@ -8,6 +8,8 @@
 #include "network/NetworkManager.h"
 #include "sensors/Sensors.h"
 
+using smartrc::Drive;
+
 namespace smartrc {
 
 namespace {
@@ -289,6 +291,22 @@ void WsServer::pollEvents() {
     } else if (mode != lastNetMode_) {
         lastNetMode_ = mode;
         broadcastEvent("net_mode_changed");
+    }
+
+    // Drain any brake-decision events queued by Drive. We broadcast a
+    // richer payload (v, a) so the app's Events panel can show what the
+    // firmware saw at the moment it decided.
+    Drive::Event ev;
+    while (deps_.drive->takeEvent(ev)) {
+        JsonDocument doc;
+        doc["t"]    = "event";
+        doc["kind"] = ev.kind;
+        doc["ts"]   = ev.ts_ms;
+        doc["v"]    = ev.v;
+        if (ev.a != 0) doc["a"] = ev.a;
+        String out; serializeJson(doc, out);
+        ws_.textAll(out);
+        Serial.printf("[ws] event: %s (v=%+.2f a=%+.2f)\n", ev.kind, ev.v, ev.a);
     }
 }
 

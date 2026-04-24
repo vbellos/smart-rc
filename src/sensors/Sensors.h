@@ -37,8 +37,9 @@ void recalibrateImu();
  */
 void appendSensorsJson(JsonObject parent);
 
-// Direct access for the Serial CLI's `imu` diagnostic command.
-const Mpu6050& imu();
+// Direct access for the Serial CLI's `imu` diagnostic command and for
+// Drive which needs to call resetVelocity() after a brake completes.
+Mpu6050& imu();
 
 }  // namespace sensors
 }  // namespace smartrc

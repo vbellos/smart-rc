@@ -50,13 +50,15 @@ void appendSensorsJson(JsonObject parent) {
         imu["temp_c"]     = r2(m.temperature_c);
         imu["valid"]      = m.valid;
         imu["calibrated"] = g_mpu.gyroCalibrated();
+        imu["vx"]         = r2(g_mpu.velocityX());
+        imu["stationary"] = g_mpu.isStationary();
     }
     // Future sensors land here:
     //   if (g_tof.present()) { ... s["distance"] ... }
     //   if (g_ina.present()) { ... s["battery"]  ... }
 }
 
-const Mpu6050& imu() { return g_mpu; }
+Mpu6050& imu() { return g_mpu; }
 
 }  // namespace sensors
 }  // namespace smartrc

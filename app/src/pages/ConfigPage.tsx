@@ -142,6 +142,34 @@ function MotorsTab({ cfg, save, saving }: {
         />
       </div>
 
+      <div>
+        <div className="caption mb-2">IMU mount orientation</div>
+        <p className="text-xs text-ink-400 mb-3">
+          Toggle these if the IMU board is mounted rotated/flipped.
+          Diagnose via Setup → Forward pulse test (vx sign).
+        </p>
+        <div className="grid gap-3 md:grid-cols-3">
+          <ToggleField
+            label="Invert IMU X"
+            sub="fwd/back axis — flip if forward drive gives negative vx"
+            checked={local.imuInvertX}
+            onChange={(b) => setLocal({ ...local, imuInvertX: b })}
+          />
+          <ToggleField
+            label="Invert IMU Y"
+            sub="left/right axis"
+            checked={local.imuInvertY}
+            onChange={(b) => setLocal({ ...local, imuInvertY: b })}
+          />
+          <ToggleField
+            label="Invert IMU Z"
+            sub="up/down axis"
+            checked={local.imuInvertZ}
+            onChange={(b) => setLocal({ ...local, imuInvertZ: b })}
+          />
+        </div>
+      </div>
+
       <SaveBar
         saving={saving}
         onSave={() => save(diff(cfg, local))}

@@ -38,6 +38,12 @@ struct Config {
     uint8_t  defaultDrivePwm    = 200;  // 0..255
     uint8_t  defaultSteerPwm    = 220;  // 0..255
 
+    // Active-brake: reverse-drives the motor when `brake` is issued
+    // while the car is moving, using the IMU to detect when the vehicle
+    // has actually come to rest. See Drive::brake() / Drive::update().
+    uint8_t  activeBrakePwm     = 220;  // 0..255, how hard to reverse
+    uint16_t activeBrakeMaxMs   = 600;  // hard upper bound on brake time
+
     // Swap electrical polarity without rewiring. Leaves the logical API
     // unchanged — "forward" still means forward from the driver's POV.
     bool     driveInverted      = false;

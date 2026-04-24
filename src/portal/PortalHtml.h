@@ -104,6 +104,8 @@ inline const char PORTAL_HTML[] = R"HTML(<!doctype html>
     <label>Steering cooldown (ms)</label><input name="steeringCooldownMs" type="number" min="0" max="2000">
     <label>Default drive PWM (0-255)</label><input name="defaultDrivePwm" type="number" min="0" max="255">
     <label>Default steering PWM (0-255)</label><input name="defaultSteerPwm" type="number" min="0" max="255">
+    <label>Active brake PWM (0-255)</label><input name="activeBrakePwm" type="number" min="0" max="255">
+    <label>Active brake max duration (ms)</label><input name="activeBrakeMaxMs" type="number" min="100" max="5000">
     <label>Heartbeat timeout (ms)</label><input name="heartbeatTimeoutMs" type="number" min="50" max="60000">
     <div class="invert-row">
       <label><input type="checkbox" name="driveInverted"> Invert drive direction</label>

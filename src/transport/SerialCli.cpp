@@ -53,6 +53,25 @@ void SerialCli::begin(const SerialCliDeps& deps) {
 }
 
 void SerialCli::update() {
+    // Background `imu watch` streamer. Non-blocking — one line per tick
+    // so motor/safety/net loops keep running while we log.
+    if (watchActive_) {
+        const uint32_t now = millis();
+        if ((int32_t)(now - watchEndMs_) >= 0) {
+            watchActive_ = false;
+            Serial.println("[watch] done");
+            printPrompt();
+        } else if ((int32_t)(now - watchNextMs_) >= 0) {
+            const smartrc::sensors::Mpu6050& m = smartrc::sensors::imu();
+            const auto& s = m.last();
+            Serial.printf(
+                "%5lu  ax=%+6.2f  ay=%+6.2f  az=%+6.2f  vx=%+6.3f  stat=%d\n",
+                (unsigned long)(now - watchStartMs_),
+                s.ax, s.ay, s.az, m.velocityX(), (int)m.isStationary());
+            watchNextMs_ += 100;
+        }
+    }
+
     while (Serial.available()) {
         const char c = (char)Serial.read();
         if (c == '\r' || c == '\n') {
@@ -109,7 +128,8 @@ void SerialCli::printHelp() {
         "  token [<new> | clear]      show / set / clear controlToken\n"
         "  i2c scan                   probe I2C bus for devices\n"
         "  imu                        print current IMU reading\n"
-        "  imu calibrate              re-sample gyro bias (hold still ~2s)\n");
+        "  imu calibrate              re-sample gyro bias (hold still ~2s)\n"
+        "  imu watch [sec]            stream ax/ay/az/vx every 100ms (default 6s)\n");
 }
 
 void SerialCli::processLine(const String& line) {
@@ -150,6 +170,7 @@ void SerialCli::processLine(const String& line) {
     else if (cmd == "imu" && n >= 2 && tok[1] == "calibrate") {
         smartrc::sensors::recalibrateImu();
     }
+    else if (cmd == "imu" && n >= 2 && tok[1] == "watch")  cmdImuWatch(tok, n);
     else if (cmd == "imu")        cmdImu();
 
     else                          Serial.printf("unknown: %s (type 'help')\n", cmd.c_str());
@@ -332,6 +353,25 @@ void SerialCli::cmdImu() {
     Serial.printf("gyro bias     x=%+6.2f y=%+6.2f z=%+6.2f deg/s  (cal=%d)\n",
                   m.gyroBiasDps(0), m.gyroBiasDps(1), m.gyroBiasDps(2),
                   (int)m.gyroCalibrated());
+    Serial.printf("velocity X    %+6.3f m/s   stationary=%d\n",
+                  m.velocityX(), (int)m.isStationary());
+}
+
+void SerialCli::cmdImuWatch(const String* argv, int argc) {
+    int seconds = (argc >= 3) ? argv[2].toInt() : 6;
+    if (seconds < 1) seconds = 1;
+    if (seconds > 30) seconds = 30;
+    const uint32_t now = millis();
+    watchStartMs_ = now;
+    watchNextMs_  = now;          // fire first line immediately
+    watchEndMs_   = now + (uint32_t)seconds * 1000;
+    watchActive_  = true;
+    Serial.printf(
+        "[watch] streaming IMU for %d s — drive or push the car now\n", seconds);
+    Serial.println(
+        "  ts    ax     ay     az     vx     stat");
+    Serial.println(
+        "----  ------ ------ ------ ------ ----");
 }
 
 void SerialCli::cmdToken(const String* argv, int argc) {

@@ -156,6 +156,8 @@ void Portal::handleGetConfig(AsyncWebServerRequest* req) {
     doc["steeringCooldownMs"] = c.steeringCooldownMs;
     doc["defaultDrivePwm"]    = c.defaultDrivePwm;
     doc["defaultSteerPwm"]    = c.defaultSteerPwm;
+    doc["activeBrakePwm"]     = c.activeBrakePwm;
+    doc["activeBrakeMaxMs"]   = c.activeBrakeMaxMs;
     doc["heartbeatTimeoutMs"] = c.heartbeatTimeoutMs;
     doc["driveInverted"]      = c.driveInverted;
     doc["steerInverted"]      = c.steerInverted;
@@ -186,6 +188,8 @@ void Portal::handlePostConfig(AsyncWebServerRequest* req, JsonVariant& body) {
     if (body["steeringCooldownMs"].is<int>()) c.steeringCooldownMs = body["steeringCooldownMs"];
     if (body["defaultDrivePwm"].is<int>())    c.defaultDrivePwm    = body["defaultDrivePwm"];
     if (body["defaultSteerPwm"].is<int>())    c.defaultSteerPwm    = body["defaultSteerPwm"];
+    if (body["activeBrakePwm"].is<int>())     c.activeBrakePwm     = (uint8_t)constrain((int)body["activeBrakePwm"], 0, 255);
+    if (body["activeBrakeMaxMs"].is<int>())   c.activeBrakeMaxMs   = (uint16_t)constrain((int)body["activeBrakeMaxMs"], 100, 5000);
     if (body["heartbeatTimeoutMs"].is<int>()) c.heartbeatTimeoutMs = body["heartbeatTimeoutMs"];
     if (body["driveInverted"].is<bool>())     c.driveInverted      = body["driveInverted"].as<bool>();
     if (body["steerInverted"].is<bool>())     c.steerInverted      = body["steerInverted"].as<bool>();
@@ -206,6 +210,8 @@ void Portal::handlePostConfig(AsyncWebServerRequest* req, JsonVariant& body) {
     deps_.steering->setInverted(c.steerInverted);
     deps_.drive->setDefaultPwm(c.defaultDrivePwm);
     deps_.drive->setInverted(c.driveInverted);
+    deps_.drive->setActiveBrakePwm(c.activeBrakePwm);
+    deps_.drive->setActiveBrakeMaxMs(c.activeBrakeMaxMs);
     deps_.safety->setTimeout(c.heartbeatTimeoutMs);
     sensors::setImuInverts(c.imuInvertX, c.imuInvertY, c.imuInvertZ);
 
