@@ -1,17 +1,19 @@
 import { PageHeader, ConnectionBadge } from '../components/Layout'
 import { ControlPad } from '../components/ControlPad'
-import { useTelemetry } from '../hooks/useTelemetry'
-import { SteerDirName, SteerStateName } from '../lib/types'
+import { useEvents, useTelemetry } from '../hooks/useTelemetry'
+import { SteerDirName, steerStateLabel } from '../lib/types'
 import { StatCard } from '../components/StatCard'
 import { Radio } from '../components/Icons'
 import { useDevice } from '../context/DeviceContext'
 
 export default function DrivePage() {
   const t = useTelemetry()
+  const events = useEvents(100)
+  const staleDrops = events.filter((e) => e.kind === 'stale_timeout').length
   const { status } = useDevice()
   const rssi = t?.net.rssi ?? status?.net.rssi ?? 0
   const driveMoving = t?.drive.moving ?? false
-  const steerState  = SteerStateName[t?.steer.state ?? 0]
+  const steerState  = steerStateLabel(t?.steer.state)
   const steerDir    = SteerDirName[t?.steer.lastDir ?? 0]
   const stale       = t?.safety.stale ?? false
   const estop       = t?.safety.emergency ?? false
@@ -61,7 +63,11 @@ export default function DrivePage() {
               eyebrow="Heartbeat"
               value={stale ? 'STALE' : 'FRESH'}
               tone={stale ? 'warn' : 'ok'}
-              sub={stale ? 'Safety has stopped motors' : 'Commands recent'}
+              sub={
+                staleDrops > 0
+                  ? `${staleDrops} drop${staleDrops === 1 ? '' : 's'} this session`
+                  : stale ? 'Safety has stopped motors' : 'Commands recent'
+              }
             />
           </div>
         </aside>

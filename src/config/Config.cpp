@@ -40,7 +40,7 @@ void loadConfig(Config& out) {
     out.steeringCooldownMs = p.getUShort("st_cd",   120);
     out.defaultDrivePwm    = p.getUChar ("dr_pwm",  200);
     out.defaultSteerPwm    = p.getUChar ("st_pwm",  220);
-    out.heartbeatTimeoutMs = p.getUShort("hb_ms",   800);
+    out.heartbeatTimeoutMs = p.getUShort("hb_ms",   1500);
     out.driveInverted      = p.getBool  ("dr_inv",  false);
     out.steerInverted      = p.getBool  ("st_inv",  false);
     out.apShutdownAfterProvision = p.getBool("ap_sdn", true);

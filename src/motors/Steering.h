@@ -8,12 +8,17 @@ namespace smartrc {
 
 // Front motor (TB6612 channel A) used as a position-less steering actuator.
 //
-// Steering is OPEN-LOOP TIMED PULSES — not angle / not servo control.
-// A "left" or "right" command energises the motor for `pulseMs` and then
-// stops it. pulseLeft/pulseRight are always accepted — calling the opposite
-// direction while a pulse is running interrupts it and reverses instantly.
-// `cooldownMs` is now an informational "post-pulse coast window" in the
-// state machine (useful for status reporting); it does NOT gate user input.
+// Steering is OPEN-LOOP HOLD — pulseLeft/pulseRight energise the motor and
+// keep it on until either (a) Steering::stop() is called (e.g. from the
+// `steer_stop` command on button release) or (b) Safety's heartbeat
+// watchdog stops everything for command staleness. Calling the opposite
+// direction while energised interrupts and reverses instantly.
+//
+// `pulseMs` is retained as a last-resort emergency cut-out at 5× the set
+// value — it should never trigger in normal use because Safety's
+// heartbeat watchdog (default 800 ms) always wins first.
+// `cooldownMs` is a post-stop coast window (informational) that does not
+// gate user input.
 //
 // Non-blocking: callers must invoke update() regularly from loop().
 

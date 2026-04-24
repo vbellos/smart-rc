@@ -32,7 +32,7 @@ private:
     Drive*    drive_      = nullptr;
     Steering* steering_   = nullptr;
     uint32_t  lastBeatMs_ = 0;
-    uint16_t  timeoutMs_  = 800;
+    uint16_t  timeoutMs_  = 1500;
     bool      emergency_  = false;
     bool      stoppedForStale_ = false;
 };

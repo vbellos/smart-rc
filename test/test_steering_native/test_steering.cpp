@@ -50,17 +50,16 @@ static void advance(uint32_t ms) {
 // Basic pulse behavior
 // ---------------------------------------------------------------------------
 
-void test_left_pulse_runs_then_stops(void) {
+void test_left_pulse_stays_on_without_explicit_stop(void) {
     TEST_ASSERT_TRUE(steering.pulseLeft());
     TEST_ASSERT_EQUAL(MotorDir::Reverse, spy.a.dir);
     TEST_ASSERT_EQUAL(200, spy.a.speed);
 
-    advance(99);
+    // Under the new "hold" model, time alone should NOT drop us out of
+    // Pulsing — Safety's heartbeat watchdog or an explicit stop() does.
+    advance(500);
     TEST_ASSERT_EQUAL(Steering::State::Pulsing, steering.state());
-
-    advance(2);  // total 101 >= 100
-    TEST_ASSERT_EQUAL(Steering::State::Cooldown, steering.state());
-    TEST_ASSERT_EQUAL(MotorDir::Coast, spy.a.dir);
+    TEST_ASSERT_EQUAL(MotorDir::Reverse, spy.a.dir);
 }
 
 void test_right_pulse_runs_then_stops(void) {
@@ -68,17 +67,15 @@ void test_right_pulse_runs_then_stops(void) {
     TEST_ASSERT_EQUAL(MotorDir::Forward, spy.a.dir);
 }
 
-void test_same_direction_during_pulse_extends_window(void) {
+void test_same_direction_during_pulse_is_idempotent(void) {
     TEST_ASSERT_TRUE(steering.pulseLeft());
     advance(20);
     int callsBefore = spy.a.calls;
     TEST_ASSERT_TRUE(steering.pulseLeft());
-    // Same direction shouldn't re-issue a physical set() call — it just
-    // slides the window forward so a held key doesn't flicker.
+    // Same direction shouldn't re-issue a physical set() call — a held
+    // key just keeps refreshing the state timer without flicker.
     TEST_ASSERT_EQUAL(callsBefore, spy.a.calls);
-    // Advance past the *original* pulseMs. Because the window restarted at
-    // the second press, we should still be pulsing.
-    advance(90);  // 20 + 90 = 110 > 100 (original start)
+    advance(200);
     TEST_ASSERT_EQUAL(Steering::State::Pulsing, steering.state());
 }
 
@@ -101,7 +98,8 @@ void test_opposite_direction_during_pulse_reverses_instantly(void) {
 
 void test_reversal_during_cooldown_is_accepted(void) {
     TEST_ASSERT_TRUE(steering.pulseLeft());
-    advance(101);  // pulse done -> cooldown
+    steering.stop();  // explicit release — enters cooldown
+    advance(10);
     TEST_ASSERT_EQUAL(Steering::State::Cooldown, steering.state());
     // Cooldown USED to reject reversals; the new model accepts immediately.
     TEST_ASSERT_TRUE(steering.pulseRight());

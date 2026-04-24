@@ -13,7 +13,8 @@
       "PowerShell(& \"$env:USERPROFILE\\\\.platformio\\\\penv\\\\Scripts\\\\pio.exe\" run 2>&1 | Select-Object -Last 15)",
       "PowerShell(& \"$env:USERPROFILE\\\\.platformio\\\\penv\\\\Scripts\\\\pio.exe\" run 2>&1 | Select-Object -Last 12)",
       "PowerShell(& \"$env:USERPROFILE\\\\.platformio\\\\penv\\\\Scripts\\\\pio.exe\" run 2>&1 | Select-Object -Last 10)",
-      "PowerShell(Get-ChildItem -Path \"C:\\\\Users\\\\vbellos\\\\Documents\\\\PlatformIO\\\\Projects\\\\Smart RC\\\\app\\\\src\" -Recurse -File | Select-Object FullName, Length | Sort-Object FullName | ForEach-Object { \"{0,-65} {1,8}\" -f \\($_.FullName.Substring\\($_.FullName.IndexOf\\(\"app\\\\src\"\\)\\)\\), $_.Length })"
+      "PowerShell(Get-ChildItem -Path \"C:\\\\Users\\\\vbellos\\\\Documents\\\\PlatformIO\\\\Projects\\\\Smart RC\\\\app\\\\src\" -Recurse -File | Select-Object FullName, Length | Sort-Object FullName | ForEach-Object { \"{0,-65} {1,8}\" -f \\($_.FullName.Substring\\($_.FullName.IndexOf\\(\"app\\\\src\"\\)\\)\\), $_.Length })",
+      "PowerShell(& \"$env:USERPROFILE\\\\.platformio\\\\penv\\\\Scripts\\\\pio.exe\" run 2>&1 | Select-Object -Last 8)"
     ]
   }
 }

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { PageHeader, ConnectionBadge } from '../components/Layout'
 import { StatCard } from '../components/StatCard'
 import { useEvents, useTelemetry } from '../hooks/useTelemetry'
-import { SteerDirName, SteerStateName } from '../lib/types'
+import { SteerDirName, steerStateLabel } from '../lib/types'
 import { useDevice } from '../context/DeviceContext'
 import { Battery, Compass, Gauge, Radio, Ruler } from '../components/Icons'
 
@@ -25,7 +25,7 @@ export default function MonitorPage() {
 
   const rssi = t?.net.rssi ?? status?.net.rssi ?? 0
   const driveMoving = t?.drive.moving ?? false
-  const steerState  = SteerStateName[t?.steer.state ?? 0]
+  const steerState  = steerStateLabel(t?.steer.state)
   const steerDir    = SteerDirName[t?.steer.lastDir ?? 0]
 
   return (

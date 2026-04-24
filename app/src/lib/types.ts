@@ -122,3 +122,12 @@ export interface SavedDevice {
 // Steering state enum values (must match Steering::State in firmware)
 export const SteerStateName = ['idle', 'pulsing', 'cooldown'] as const
 export const SteerDirName   = ['none', 'left',    'right'] as const
+
+/**
+ * Display-only label: merges `cooldown` (state 2) into `idle` because
+ * the motor is physically off in both cases. The raw `cooldown` state
+ * is still exposed on the wire for anyone needing the invariant.
+ */
+export function steerStateLabel(state: number | undefined): 'idle' | 'pulsing' {
+  return state === 1 ? 'pulsing' : 'idle'
+}

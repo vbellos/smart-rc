@@ -60,7 +60,12 @@ struct Config {
     uint8_t  logLevel = 3;
 
     // Safety
-    uint16_t heartbeatTimeoutMs = 800;  // motors stop if no command within
+    //   Dead-man watchdog. If no accepted command arrives within this
+    //   window, motors are force-stopped. Keep high enough to tolerate
+    //   Wi-Fi jitter + mobile browser setInterval drift (real-world
+    //   gaps of 300-900 ms happen on congested APs), but low enough
+    //   that a genuinely-disconnected client stops the vehicle quickly.
+    uint16_t heartbeatTimeoutMs = 1500;
 };
 
 // Load config from NVS, applying built-in defaults for missing keys.

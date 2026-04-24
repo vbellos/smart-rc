@@ -73,9 +73,17 @@ void Steering::update() {
     const uint32_t now     = millis();
     const uint32_t elapsed = now - stateStartMs_;
 
-    if (state_ == State::Pulsing && elapsed >= pulseMs_) {
-        // End pulse -> coast. Enter cooldown only as an informational
-        // state; it no longer gates opposite-direction requests.
+    // NOTE: the Pulsing -> Cooldown transition used to fire here when
+    // `elapsed >= pulseMs_`. We removed that edge — steering now behaves
+    // like Drive: motor stays energised until either an explicit
+    // Steering::stop() (triggered by a `steer_stop` command on release)
+    // or the Safety watchdog stopping everything for stale heartbeat.
+    //
+    // pulseMs_ is kept around as a last-resort safety net, in case the
+    // client disappears without sending a release. It's intentionally
+    // longer than heartbeatTimeoutMs so the watchdog wins first.
+    if (state_ == State::Pulsing && elapsed >= (uint32_t)pulseMs_ * 5) {
+        // Emergency catch-all — should never hit in normal operation.
         if (driver_) driver_->set(MotorChannel::A, MotorDir::Coast, 0);
         lastDir_      = dir_;
         dir_          = Dir::None;
