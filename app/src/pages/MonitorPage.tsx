@@ -1,43 +1,76 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useMemo } from 'react'
 import { PageHeader, ConnectionBadge } from '../components/Layout'
 import { StatCard } from '../components/StatCard'
+import { ChartCard, type ChartSeries } from '../components/Chart'
 import { useEvents, useTelemetry } from '../hooks/useTelemetry'
+import { useMultiSeries, useTimeSeries } from '../hooks/useSeries'
 import { SteerDirName, steerStateLabel } from '../lib/types'
 import { useDevice } from '../context/DeviceContext'
 import { Battery, Compass, Gauge, Radio, Ruler } from '../components/Icons'
 
 /**
- * Live telemetry + sensor dashboard. The drive/steer/safety/net rows come
- * straight off the WS telemetry stream. The sensor grid (gyro / accel /
- * distance / battery) pulls from the `sensors` object in telemetry or
- * /api/status — which the firmware's sensors/ extension point is designed
- * to fill in. Until then we show friendly placeholders so the UI's ready
- * the moment hardware is added.
+ * Live telemetry + sensor dashboard.
+ *
+ * - Core stat cards pull from the WS telemetry stream.
+ * - Chart cards are time-series buffered client-side via useTimeSeries /
+ *   useMultiSeries at a steady 500 ms cadence (so the lines stay smooth
+ *   even when the underlying source is bursty or idle).
+ * - Sensor grid pulls from `telemetry.sensors` / `status.sensors`, which
+ *   the firmware's `sensors/` extension point is designed to fill in.
+ *   Placeholders show until hardware is wired.
  */
 export default function MonitorPage() {
   const t = useTelemetry()
   const { status } = useDevice()
-  const events = useEvents(40)
+  const events = useEvents(60)
 
   const sensors: Record<string, unknown> =
     (t?.sensors as Record<string, unknown>) ??
     (status?.sensors as Record<string, unknown>) ?? {}
 
   const rssi = t?.net.rssi ?? status?.net.rssi ?? 0
+  const heapFree = status?.heap_free ?? 0
   const driveMoving = t?.drive.moving ?? false
-  const steerState  = steerStateLabel(t?.steer.state)
-  const steerDir    = SteerDirName[t?.steer.lastDir ?? 0]
+  const steerState = steerStateLabel(t?.steer.state)
+  const steerDir = SteerDirName[t?.steer.lastDir ?? 0]
+
+  // ---------- Series buffers ---------------------------------------------
+
+  const rssiSeries    = useTimeSeries(rssi === 0 ? null : rssi, 120, 500)
+  const heapSeries    = useTimeSeries(heapFree / 1024, 120, 500)
+  const imuData       = pick(sensors, 'imu')
+  const batteryData   = pick(sensors, 'battery')
+  const distanceData  = pick(sensors, 'distance')
+
+  const imuSeries = useMultiSeries(
+    () => ({
+      gx: num(imuData, 'gx'),
+      gy: num(imuData, 'gy'),
+      gz: num(imuData, 'gz'),
+    }),
+    120, 500
+  )
+  const accelSeries = useMultiSeries(
+    () => ({
+      ax: num(imuData, 'ax'),
+      ay: num(imuData, 'ay'),
+      az: num(imuData, 'az'),
+    }),
+    120, 500
+  )
+  const batterySeries  = useTimeSeries(num(batteryData, 'voltage'), 240, 1000)
+  const distanceSeries = useTimeSeries(num(distanceData, 'front'),  120, 500)
 
   return (
     <div>
       <PageHeader
         eyebrow="Telemetry"
         title="Monitor"
-        subtitle="Live data stream from the vehicle."
+        subtitle="Live data stream and timeline from the vehicle."
         right={<ConnectionBadge />}
       />
 
-      {/* Core RC telemetry */}
+      {/* ------- Core stats -------- */}
       <section className="mb-8">
         <h2 className="caption mb-3">Core</h2>
         <div className="grid gap-3 grid-cols-2 md:grid-cols-4">
@@ -45,51 +78,71 @@ export default function MonitorPage() {
             eyebrow="Signal"
             value={rssi || '—'} unit="dBm"
             tone={rssi > -60 ? 'ok' : rssi > -75 ? 'warn' : 'err'}
-            icon={<Radio className="size-4"/>}
+            icon={<Radio className="size-4" />}
           />
           <StatCard
             eyebrow="Drive"
             value={driveMoving ? 'MOVING' : 'IDLE'}
             tone={driveMoving ? 'ok' : 'neutral'}
-            icon={<Gauge className="size-4"/>}
+            icon={<Gauge className="size-4" />}
           />
           <StatCard
             eyebrow="Steering"
             value={steerState.toUpperCase()}
             sub={steerDir === 'none' ? 'centered' : `last: ${steerDir}`}
             tone={steerState === 'pulsing' ? 'ok' : 'neutral'}
-            icon={<Compass className="size-4"/>}
+            icon={<Compass className="size-4" />}
           />
           <StatCard
             eyebrow="Uptime"
             value={formatUptime(status?.uptime_ms ?? 0)}
-            sub={`Heap: ${formatKB(status?.heap_free ?? 0)} free`}
+            sub={`Heap: ${formatKB(heapFree)} free`}
           />
         </div>
       </section>
 
-      {/* Sensor grid — wired to the firmware's sensors/ extension */}
+      {/* ------- Chart grid -------- */}
+      <section className="mb-8">
+        <div className="flex items-baseline justify-between mb-3">
+          <h2 className="caption">Charts</h2>
+          <span className="text-[11px] text-ink-500">client-side · 500 ms samples · 60 s window</span>
+        </div>
+        <div className="grid gap-3 md:grid-cols-2">
+          <ChartCard
+            title="Signal · RSSI"
+            series={[{ label: 'dBm', color: 'rgb(163,230,53)', data: rssiSeries }]}
+            unit="dBm"
+            min={-95} max={-30}
+            icon={<Radio className="size-4" />}
+            fill
+          />
+          <ChartCard
+            title="Free heap"
+            series={[{ label: 'KB', color: 'rgb(56,189,248)', data: heapSeries }]}
+            unit="KB"
+            icon={<Gauge className="size-4" />}
+            fill
+          />
+        </div>
+      </section>
+
+      {/* ------- Sensors (firmware extension point) -------- */}
       <section className="mb-8">
         <div className="flex items-baseline justify-between mb-3">
           <h2 className="caption">Sensors</h2>
           <span className="text-[11px] text-ink-500">
-            Populated by <code className="text-ink-300">sensors::appendStatusJson()</code>
+            from <code className="text-ink-300">sensors::appendStatusJson()</code>
           </span>
         </div>
-        <div className="grid gap-3 grid-cols-2 md:grid-cols-3">
-          <SensorIMU data={pick(sensors, 'imu')} />
-          <SensorDistance data={pick(sensors, 'distance')} />
-          <SensorBattery data={pick(sensors, 'battery')} />
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+          <IMUCard title="Gyro" axes={imuSeries} unit="°/s" icon={<Compass className="size-4"/>} />
+          <IMUCard title="Accelerometer" axes={accelSeries} unit="m/s²" />
+          <BatteryCard series={batterySeries} data={batteryData} />
+          <DistanceCard series={distanceSeries} data={distanceData} />
         </div>
       </section>
 
-      {/* Live RSSI timeline */}
-      <section className="mb-8">
-        <h2 className="caption mb-3">Signal over time</h2>
-        <Sparkline value={rssi} />
-      </section>
-
-      {/* Event log */}
+      {/* ------- Event log -------- */}
       <section>
         <h2 className="caption mb-3">Events</h2>
         <div className="card p-0 overflow-hidden">
@@ -102,7 +155,7 @@ export default function MonitorPage() {
           <ul className="divide-y divide-[#1c1c22]">
             {events.map((e, i) => (
               <li key={i} className="px-4 py-3 flex items-center gap-3 text-sm">
-                <span className={`size-2 rounded-full ${eventColor(e.kind)}`}/>
+                <span className={`size-2 rounded-full ${eventColor(e.kind)}`} />
                 <span className="font-medium text-white">{e.kind}</span>
                 {e.ts && <span className="ml-auto text-xs text-ink-500 tabular-nums">{e.ts}ms</span>}
               </li>
@@ -114,113 +167,110 @@ export default function MonitorPage() {
   )
 }
 
-/* ---- Sensor cards (placeholders until hardware is wired) -------------- */
+/* --------------------------------------------------------------------- */
+/* Sensor chart cards                                                     */
+/* --------------------------------------------------------------------- */
 
-function SensorIMU({ data }: { data: Record<string, unknown> | null }) {
-  const gx = num(data, 'gx'), gy = num(data, 'gy'), gz = num(data, 'gz')
-  const ax = num(data, 'ax'), ay = num(data, 'ay'), az = num(data, 'az')
-  const has = data != null
+function IMUCard({
+  title, axes, unit, icon,
+}: {
+  title: string
+  axes: Record<string, number[]>
+  unit: string
+  icon?: React.ReactNode
+}) {
+  const hasData = Object.values(axes).some((a) => a.length > 0)
+  const prefixes = useMemo(() => {
+    // Expected keys are either gx/gy/gz (gyro) or ax/ay/az (accel).
+    const keys = Object.keys(axes)
+    if (keys.length === 0) return []
+    const colors: Record<string, string> = {
+      gx: 'rgb(163,230,53)', gy: 'rgb(56,189,248)', gz: 'rgb(167,139,250)',
+      ax: 'rgb(163,230,53)', ay: 'rgb(56,189,248)', az: 'rgb(167,139,250)',
+    }
+    return keys.map((k): ChartSeries => ({
+      label: k,
+      color: colors[k] ?? 'rgb(200,200,200)',
+      data: axes[k] ?? [],
+    }))
+  }, [axes])
+
+  if (!hasData) {
+    return <PlaceholderCard title={title} icon={icon} hint="MPU6050 / BNO055 / LSM6DS3" />
+  }
   return (
-    <div className={`card p-5 ${has ? 'ring-lime-500/25' : ''}`}>
-      <div className="flex items-center justify-between">
-        <span className="caption">IMU · Gyro + Accel</span>
-        <Compass className="size-4 text-ink-400"/>
-      </div>
-      {has ? (
-        <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
-          <MiniRow label="gx" val={gx} unit="°/s" />
-          <MiniRow label="ax" val={ax} unit="m/s²" />
-          <MiniRow label="gy" val={gy} unit="°/s" />
-          <MiniRow label="ay" val={ay} unit="m/s²" />
-          <MiniRow label="gz" val={gz} unit="°/s" />
-          <MiniRow label="az" val={az} unit="m/s²" />
-        </div>
-      ) : (
-        <Placeholder hint="MPU6050 / BNO055 / LSM6DS3" />
-      )}
-    </div>
+    <ChartCard
+      title={title}
+      series={prefixes}
+      unit={unit}
+      icon={icon}
+      fill={false}
+    />
   )
 }
 
-function SensorDistance({ data }: { data: Record<string, unknown> | null }) {
-  const front = num(data, 'front')
-  const has = data != null
-  return (
-    <div className={`card p-5 ${has ? 'ring-sky-500/25' : ''}`}>
-      <div className="flex items-center justify-between">
-        <span className="caption">Distance</span>
-        <Ruler className="size-4 text-ink-400"/>
-      </div>
-      {has ? (
-        <>
-          <div className="mt-3 flex items-baseline gap-1.5">
-            <span className="hero-num">{front != null ? front.toFixed(0) : '—'}</span>
-            <span className="text-sm text-ink-400">cm</span>
-          </div>
-          <div className="mt-3 h-1.5 rounded-full bg-white/5 overflow-hidden">
-            <div
-              className="h-full bg-sky-400"
-              style={{ width: `${Math.min(100, ((front ?? 0) / 300) * 100)}%` }}
-            />
-          </div>
-          <div className="mt-2 text-xs text-ink-400">Front (HC-SR04 / VL53L0X)</div>
-        </>
-      ) : (
-        <Placeholder hint="HC-SR04 / VL53L0X / TF-Luna" />
-      )}
-    </div>
-  )
-}
-
-function SensorBattery({ data }: { data: Record<string, unknown> | null }) {
-  const v = num(data, 'voltage')
+function BatteryCard({ series, data }: {
+  series: number[]
+  data: Record<string, unknown> | null
+}) {
+  const v   = num(data, 'voltage')
   const pct = num(data, 'percent')
-  const has = data != null
-  const tone: 'ok' | 'warn' | 'err' | 'neutral' =
-    pct == null ? 'neutral' : pct > 40 ? 'ok' : pct > 15 ? 'warn' : 'err'
+  if (!data) {
+    return <PlaceholderCard title="Battery" icon={<Battery className="size-4"/>} hint="Voltage divider on VM / INA219" />
+  }
+  const tone: 'ok' | 'warn' | 'err' =
+    pct == null ? 'ok' : pct > 40 ? 'ok' : pct > 15 ? 'warn' : 'err'
+  const colors = { ok: 'rgb(163,230,53)', warn: 'rgb(251,191,36)', err: 'rgb(244,63,94)' }
+
   return (
-    <div className={`card p-5 ${has ? (tone === 'err' ? 'ring-rose-500/30' : 'ring-lime-500/25') : ''}`}>
-      <div className="flex items-center justify-between">
-        <span className="caption">Battery</span>
-        <Battery className="size-4 text-ink-400"/>
+    <ChartCard
+      title="Battery"
+      series={[{ label: 'V', color: colors[tone], data: series }]}
+      unit="V"
+      icon={<Battery className="size-4"/>}
+      subtitle={pct != null ? `${pct.toFixed(0)}% remaining` : undefined}
+      format={() => (v != null ? v.toFixed(2) : '—')}
+      fill
+    />
+  )
+}
+
+function DistanceCard({ series, data }: {
+  series: number[]
+  data: Record<string, unknown> | null
+}) {
+  if (!data) {
+    return <PlaceholderCard title="Distance · Front" icon={<Ruler className="size-4"/>} hint="HC-SR04 / VL53L0X / TF-Luna" />
+  }
+  return (
+    <ChartCard
+      title="Distance · Front"
+      series={[{ label: 'cm', color: 'rgb(56,189,248)', data: series }]}
+      unit="cm"
+      icon={<Ruler className="size-4"/>}
+      min={0} max={300}
+      fill
+    />
+  )
+}
+
+function PlaceholderCard({ title, hint, icon }: {
+  title: string
+  hint: string
+  icon?: React.ReactNode
+}) {
+  return (
+    <div className="card p-5 min-h-[200px] flex flex-col">
+      <div className="flex items-center justify-between mb-1">
+        <span className="caption">{title}</span>
+        {icon && <span className="text-ink-400">{icon}</span>}
       </div>
-      {has ? (
-        <>
-          <div className="mt-3 flex items-baseline gap-1.5">
-            <span className="hero-num">{v != null ? v.toFixed(2) : '—'}</span>
-            <span className="text-sm text-ink-400">V</span>
-            {pct != null && <span className="ml-auto text-sm text-ink-300">{pct.toFixed(0)}%</span>}
-          </div>
-          <div className="mt-3 h-1.5 rounded-full bg-white/5 overflow-hidden">
-            <div
-              className={`h-full ${tone === 'err' ? 'bg-rose-500' : tone === 'warn' ? 'bg-amber-400' : 'bg-lime-400'}`}
-              style={{ width: `${Math.max(0, Math.min(100, pct ?? 0))}%` }}
-            />
-          </div>
-        </>
-      ) : (
-        <Placeholder hint="Voltage divider on VM / INA219" />
-      )}
-    </div>
-  )
-}
-
-function MiniRow({ label, val, unit }: { label: string; val: number | null; unit: string }) {
-  return (
-    <div className="flex items-center justify-between tabular-nums">
-      <span className="text-ink-400">{label}</span>
-      <span className="text-white">
-        {val != null ? val.toFixed(2) : '—'}<span className="text-ink-500 ml-1">{unit}</span>
-      </span>
-    </div>
-  )
-}
-
-function Placeholder({ hint }: { hint: string }) {
-  return (
-    <div className="mt-3 flex flex-col items-start gap-2">
-      <span className="pill pill-muted">Not connected</span>
-      <span className="text-xs text-ink-400">Add one of: {hint}</span>
+      <div className="flex-1 grid place-items-center">
+        <div className="text-center">
+          <span className="pill pill-muted">Not connected</span>
+          <div className="text-xs text-ink-400 mt-3">{hint}</div>
+        </div>
+      </div>
     </div>
   )
 }
@@ -256,50 +306,4 @@ function eventColor(kind: string): string {
   if (kind.startsWith('estop_cleared')) return 'bg-lime-400'
   if (kind.startsWith('stale'))         return 'bg-amber-400'
   return 'bg-sky-400'
-}
-
-/* ---- tiny inline sparkline (RSSI over time) -------------------------- */
-
-function Sparkline({ value }: { value: number }) {
-  const [buf, setBuf] = useState<number[]>([])
-  const last = useRef(value)
-  useEffect(() => { last.current = value }, [value])
-
-  useEffect(() => {
-    const id = setInterval(() => {
-      setBuf((b) => [...b.slice(-119), last.current])
-    }, 500)
-    return () => clearInterval(id)
-  }, [])
-
-  const { path, min, max } = useMemo(() => {
-    if (buf.length < 2) return { path: '', min: 0, max: 0 }
-    const mn = Math.min(...buf)
-    const mx = Math.max(...buf)
-    const span = mx - mn || 1
-    const w = 100, h = 30
-    const step = w / (buf.length - 1)
-    const pts = buf.map((v, i) => {
-      const x = i * step
-      const y = h - ((v - mn) / span) * h
-      return `${i === 0 ? 'M' : 'L'}${x.toFixed(2)},${y.toFixed(2)}`
-    })
-    return { path: pts.join(' '), min: mn, max: mx }
-  }, [buf])
-
-  return (
-    <div className="card p-5 dotted-grid">
-      <div className="flex items-baseline justify-between mb-2">
-        <span className="text-xs text-ink-400">RSSI · last 60 s</span>
-        <span className="text-xs tabular-nums text-ink-500">
-          min {min || '—'} · max {max || '—'} dBm
-        </span>
-      </div>
-      <svg viewBox="0 0 100 30" preserveAspectRatio="none" className="w-full h-24">
-        <path d={path} fill="none" stroke="currentColor"
-              className="text-lime-400" strokeWidth="0.6"
-              strokeLinecap="round" strokeLinejoin="round"/>
-      </svg>
-    </div>
-  )
 }
