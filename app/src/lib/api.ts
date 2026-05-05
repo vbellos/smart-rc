@@ -100,4 +100,24 @@ export class ApiClient {
       { method: 'POST' }
     )
   }
+
+  /* --------- Stunts --------- */
+
+  runStunt(name: string) {
+    return this.fetchJson<{ ok: boolean; stunt?: string; reason?: string }>(
+      '/api/stunt',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name }),
+      }
+    )
+  }
+
+  abortStunt() {
+    return this.fetchJson<{ ok: boolean; message: string }>(
+      '/api/stunt/abort',
+      { method: 'POST' }
+    )
+  }
 }

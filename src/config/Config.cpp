@@ -52,6 +52,26 @@ void loadConfig(Config& out) {
     out.imuInvertY               = p.getBool("imu_invy", false);
     out.imuInvertZ               = p.getBool("imu_invz", false);
 
+    out.stuntSpinTargetDeg   = p.getUShort("st_sp_deg",  340);
+    out.stuntSpinTimeoutMs   = p.getUShort("st_sp_tout", 2500);
+    out.stuntSpinPwm         = p.getUChar ("st_sp_pwm",  255);
+    out.stuntJturnFwdMs      = p.getUShort("st_jt_fwd",  700);
+    out.stuntJturnBrakeMs    = p.getUShort("st_jt_brk",  300);
+    out.stuntJturnRevMs      = p.getUShort("st_jt_rev",  900);
+    out.stuntJturnPwm        = p.getUChar ("st_jt_pwm",  255);
+    out.stuntWiggleKickMs    = p.getUShort("st_wg_kick", 150);
+    out.stuntWiggleHoldMs    = p.getUShort("st_wg_hold", 280);
+    out.stuntWiggleCycles    = p.getUChar ("st_wg_cyc",  3);
+    out.stuntWigglePwm       = p.getUChar ("st_wg_pwm",  255);
+    out.stuntDriftFwd1Ms     = p.getUShort("st_dr_fwd",  300);
+    out.stuntDriftLockMs     = p.getUShort("st_dr_lock", 400);
+    out.stuntDriftCounterMs  = p.getUShort("st_dr_ctr",  300);
+    out.stuntDriftPwm        = p.getUChar ("st_dr_pwm",  255);
+    out.stuntPwrRevFwdMs     = p.getUShort("st_pr_fwd",  600);
+    out.stuntPwrRevBrakeMs   = p.getUShort("st_pr_brk",  250);
+    out.stuntPwrRevRevMs     = p.getUShort("st_pr_rev",  700);
+    out.stuntPwrRevPwm       = p.getUChar ("st_pr_pwm",  255);
+
     p.end();
 }
 
@@ -86,6 +106,26 @@ bool saveConfig(const Config& cfg) {
     p.putBool  ("imu_invx", cfg.imuInvertX);
     p.putBool  ("imu_invy", cfg.imuInvertY);
     p.putBool  ("imu_invz", cfg.imuInvertZ);
+
+    p.putUShort("st_sp_deg",  cfg.stuntSpinTargetDeg);
+    p.putUShort("st_sp_tout", cfg.stuntSpinTimeoutMs);
+    p.putUChar ("st_sp_pwm",  cfg.stuntSpinPwm);
+    p.putUShort("st_jt_fwd",  cfg.stuntJturnFwdMs);
+    p.putUShort("st_jt_brk",  cfg.stuntJturnBrakeMs);
+    p.putUShort("st_jt_rev",  cfg.stuntJturnRevMs);
+    p.putUChar ("st_jt_pwm",  cfg.stuntJturnPwm);
+    p.putUShort("st_wg_kick", cfg.stuntWiggleKickMs);
+    p.putUShort("st_wg_hold", cfg.stuntWiggleHoldMs);
+    p.putUChar ("st_wg_cyc",  cfg.stuntWiggleCycles);
+    p.putUChar ("st_wg_pwm",  cfg.stuntWigglePwm);
+    p.putUShort("st_dr_fwd",  cfg.stuntDriftFwd1Ms);
+    p.putUShort("st_dr_lock", cfg.stuntDriftLockMs);
+    p.putUShort("st_dr_ctr",  cfg.stuntDriftCounterMs);
+    p.putUChar ("st_dr_pwm",  cfg.stuntDriftPwm);
+    p.putUShort("st_pr_fwd",  cfg.stuntPwrRevFwdMs);
+    p.putUShort("st_pr_brk",  cfg.stuntPwrRevBrakeMs);
+    p.putUShort("st_pr_rev",  cfg.stuntPwrRevRevMs);
+    p.putUChar ("st_pr_pwm",  cfg.stuntPwrRevPwm);
 
     p.end();
     return true;

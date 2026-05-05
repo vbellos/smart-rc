@@ -3,12 +3,14 @@
 #include "config/Config.h"
 #include "control/CommandHandler.h"
 #include "control/Safety.h"
+#include "control/Stunts.h"
 #include "motors/Drive.h"
 #include "motors/Steering.h"
 #include "network/NetworkManager.h"
 #include "sensors/Sensors.h"
 
 using smartrc::Drive;
+using smartrc::StuntEngine;
 
 namespace smartrc {
 
@@ -150,6 +152,26 @@ void WsServer::handleText(AsyncWebSocketClient* client,
     }
 
     // cmd: motor command. Gated on auth if a token is configured.
+    // stunt: start a scripted maneuver by name.
+    if (!strcmp(t, "stunt")) {
+        if (deps_.config->controlToken.length() > 0 && !cs->authed) {
+            sendErr(client, "unauth"); return;
+        }
+        const char* name = doc["name"].as<const char*>();
+        const long id    = doc["id"] | -1L;
+        bool ok = false;
+        if (deps_.stunts && name) ok = deps_.stunts->startByName(name);
+        if (id >= 0) sendAck(client, id, ok, ok ? name : "unknown stunt");
+        return;
+    }
+    // stunt_abort: cancel a running stunt immediately.
+    if (!strcmp(t, "stunt_abort")) {
+        if (deps_.stunts) deps_.stunts->abort();
+        const long id = doc["id"] | -1L;
+        if (id >= 0) sendAck(client, id, true, "aborted");
+        return;
+    }
+
     if (!strcmp(t, "cmd")) {
         if (deps_.config->controlToken.length() > 0 && !cs->authed) {
             sendErr(client, "unauth"); return;
@@ -307,6 +329,21 @@ void WsServer::pollEvents() {
         String out; serializeJson(doc, out);
         ws_.textAll(out);
         Serial.printf("[ws] event: %s (v=%+.2f a=%+.2f)\n", ev.kind, ev.v, ev.a);
+    }
+
+    // Drain stunt lifecycle events (start / end / abort).
+    if (deps_.stunts) {
+        StuntEngine::Event sev;
+        while (deps_.stunts->takeEvent(sev)) {
+            JsonDocument doc;
+            doc["t"]     = "event";
+            doc["kind"]  = sev.kind;
+            doc["ts"]    = sev.ts_ms;
+            doc["stunt"] = sev.name;
+            String out; serializeJson(doc, out);
+            ws_.textAll(out);
+            Serial.printf("[ws] event: %s %s\n", sev.kind, sev.name);
+        }
     }
 }
 

@@ -23,7 +23,9 @@
       "Bash(\"/c/Program Files/GitHub CLI/gh.exe\" auth login --hostname github.com --git-protocol https --web)",
       "PowerShell(& \"$env:USERPROFILE\\\\.platformio\\\\penv\\\\Scripts\\\\pio.exe\" run 2>&1 | Select-Object -Last 20)",
       "PowerShell(Set-Location \"C:\\\\Users\\\\vbellos\\\\Documents\\\\PlatformIO\\\\Projects\\\\Smart RC\"; & \"$env:USERPROFILE\\\\.platformio\\\\penv\\\\Scripts\\\\pio.exe\" run 2>&1 | Select-Object -Last 10)",
-      "PowerShell(Set-Location \"C:\\\\Users\\\\vbellos\\\\Documents\\\\PlatformIO\\\\Projects\\\\Smart RC\"; & \"$env:USERPROFILE\\\\.platformio\\\\penv\\\\Scripts\\\\pio.exe\" run 2>&1 | Select-Object -Last 8)"
+      "PowerShell(Set-Location \"C:\\\\Users\\\\vbellos\\\\Documents\\\\PlatformIO\\\\Projects\\\\Smart RC\"; & \"$env:USERPROFILE\\\\.platformio\\\\penv\\\\Scripts\\\\pio.exe\" run 2>&1 | Select-Object -Last 8)",
+      "PowerShell(& \"$env:ProgramFiles\\\\GitHub CLI\\\\gh.exe\" auth status 2>&1 | Select-Object -First 6)",
+      "PowerShell(Set-Location \"C:\\\\Users\\\\vbellos\\\\Documents\\\\PlatformIO\\\\Projects\\\\Smart RC\"; & \"$env:USERPROFILE\\\\.platformio\\\\penv\\\\Scripts\\\\pio.exe\" run 2>&1 | Select-Object -Last 15)"
     ]
   }
 }

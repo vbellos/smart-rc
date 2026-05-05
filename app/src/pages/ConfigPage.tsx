@@ -4,7 +4,7 @@ import { PageHeader, ConnectionBadge } from '../components/Layout'
 import type { DeviceConfig, WifiNetwork } from '../lib/types'
 import { Lock, Wifi, Search, Check, Power } from '../components/Icons'
 
-type Tab = 'motors' | 'wifi' | 'system'
+type Tab = 'motors' | 'stunts' | 'wifi' | 'system'
 
 export default function ConfigPage() {
   const { api } = useDevice()
@@ -55,6 +55,7 @@ export default function ConfigPage() {
       <Tabs tab={tab} onChange={setTab}/>
 
       {tab === 'motors' && <MotorsTab cfg={cfg} save={save} saving={saving}/>}
+      {tab === 'stunts' && <StuntsTab cfg={cfg} save={save} saving={saving}/>}
       {tab === 'wifi'   && <WifiTab   cfg={cfg} save={save}/>}
       {tab === 'system' && <SystemTab cfg={cfg} save={save}/>}
 
@@ -70,6 +71,7 @@ export default function ConfigPage() {
 function Tabs({ tab, onChange }: { tab: Tab; onChange: (t: Tab) => void }) {
   const items: { id: Tab; label: string }[] = [
     { id: 'motors', label: 'Motors & Safety' },
+    { id: 'stunts', label: 'Stunts' },
     { id: 'wifi',   label: 'Wi-Fi & Network' },
     { id: 'system', label: 'System' },
   ]
@@ -178,6 +180,160 @@ function MotorsTab({ cfg, save, saving }: {
       />
     </div>
   )
+}
+
+/* --------------------------------------------------------------------- */
+/* Stunts tab — per-stunt timing & PWM tunables                           */
+/* --------------------------------------------------------------------- */
+
+function StuntsTab({ cfg, save, saving }: {
+  cfg: DeviceConfig
+  save: (c: Partial<DeviceConfig>) => Promise<void>
+  saving: boolean
+}) {
+  const [local, setLocal] = useState<DeviceConfig>(cfg)
+  useEffect(() => setLocal(cfg), [cfg])
+
+  // One field setter factory keeps JSX tight.
+  const set = <K extends keyof DeviceConfig>(k: K, v: DeviceConfig[K]) =>
+    setLocal((s) => ({ ...s, [k]: v }))
+
+  return (
+    <div className="space-y-4">
+      <StuntCard title="Spin (L/R)"
+        blurb="Full lock + full throttle, stopped by gyro once the integrated yaw exceeds target. <360° undershoots, >360° overshoots to compensate for motor run-on.">
+        <SliderField label="Target rotation (°)" value={local.stuntSpinTargetDeg}
+          min={90} max={720} step={10}
+          onChange={(v) => set('stuntSpinTargetDeg', v)}
+          sub="360 = full circle. Tune down if the car consistently overshoots." />
+        <SliderField label="Hard timeout (ms)" value={local.stuntSpinTimeoutMs}
+          min={500} max={10000} step={100}
+          onChange={(v) => set('stuntSpinTimeoutMs', v)}
+          sub="Abort if the rotation target isn't reached within this window." />
+        <SliderField label="Drive PWM" value={local.stuntSpinPwm}
+          min={0} max={255}
+          onChange={(v) => set('stuntSpinPwm', v)}
+          sub="Higher = more spin torque; may overshoot on slippery floors." />
+      </StuntCard>
+
+      <StuntCard title="J-Turn (L/R)"
+        blurb="Forward accel → lock steer → hard brake → reverse with wheels locked. The brake + lock combo swings the tail 180°.">
+        <SliderField label="Forward duration (ms)" value={local.stuntJturnFwdMs}
+          min={50} max={3000} step={50}
+          onChange={(v) => set('stuntJturnFwdMs', v)}
+          sub="Longer = more entry speed = bigger tail swing." />
+        <SliderField label="Brake duration (ms)" value={local.stuntJturnBrakeMs}
+          min={50} max={1500} step={50}
+          onChange={(v) => set('stuntJturnBrakeMs', v)}
+          sub="Short and hard works best; active-brake terminates early on stop." />
+        <SliderField label="Reverse duration (ms)" value={local.stuntJturnRevMs}
+          min={50} max={3000} step={50}
+          onChange={(v) => set('stuntJturnRevMs', v)}
+          sub="How long to reverse with wheels locked. Tune until you end ~180°." />
+        <SliderField label="Drive PWM" value={local.stuntJturnPwm}
+          min={0} max={255}
+          onChange={(v) => set('stuntJturnPwm', v)} />
+      </StuntCard>
+
+      <StuntCard title="Wiggle"
+        blurb="Forward kick then N full-swing L/R steering cycles. Drive stays on throughout.">
+        <SliderField label="Forward kick (ms)" value={local.stuntWiggleKickMs}
+          min={50} max={1000} step={25}
+          onChange={(v) => set('stuntWiggleKickMs', v)}
+          sub="Breaks static friction before the wiggle starts." />
+        <SliderField label="Steer hold per flick (ms)" value={local.stuntWiggleHoldMs}
+          min={50} max={800} step={20}
+          onChange={(v) => set('stuntWiggleHoldMs', v)}
+          sub="How long each side is held. Shorter = faster wiggle." />
+        <SliderField label="Number of L-R cycles" value={local.stuntWiggleCycles}
+          min={1} max={8}
+          onChange={(v) => set('stuntWiggleCycles', v)}
+          sub="Each cycle = one left + one right." />
+        <SliderField label="Drive PWM" value={local.stuntWigglePwm}
+          min={0} max={255}
+          onChange={(v) => set('stuntWigglePwm', v)} />
+      </StuntCard>
+
+      <StuntCard title="Drift (L/R)"
+        blurb="Entry throttle → hard lock → sustained throttle → counter-steer. Real drift needs a slippery floor; on carpet it becomes a tight aggressive turn."
+        experimental>
+        <SliderField label="Pre-lock forward (ms)" value={local.stuntDriftFwd1Ms}
+          min={50} max={2000} step={25}
+          onChange={(v) => set('stuntDriftFwd1Ms', v)}
+          sub="Entry speed before the hard lock." />
+        <SliderField label="Primary lock hold (ms)" value={local.stuntDriftLockMs}
+          min={50} max={2000} step={25}
+          onChange={(v) => set('stuntDriftLockMs', v)}
+          sub="Sustained-throttle-while-locked phase. Biggest effect." />
+        <SliderField label="Counter-steer (ms)" value={local.stuntDriftCounterMs}
+          min={50} max={1500} step={25}
+          onChange={(v) => set('stuntDriftCounterMs', v)}
+          sub="How long to hold the opposite lock to maintain the slide." />
+        <SliderField label="Drive PWM" value={local.stuntDriftPwm}
+          min={0} max={255}
+          onChange={(v) => set('stuntDriftPwm', v)} />
+      </StuntCard>
+
+      <StuntCard title="Power Reverse"
+        blurb="Forward accel → hard brake → full reverse. A showy direction-flip.">
+        <SliderField label="Forward duration (ms)" value={local.stuntPwrRevFwdMs}
+          min={50} max={2500} step={25}
+          onChange={(v) => set('stuntPwrRevFwdMs', v)} />
+        <SliderField label="Brake duration (ms)" value={local.stuntPwrRevBrakeMs}
+          min={50} max={1500} step={25}
+          onChange={(v) => set('stuntPwrRevBrakeMs', v)} />
+        <SliderField label="Reverse duration (ms)" value={local.stuntPwrRevRevMs}
+          min={50} max={2500} step={25}
+          onChange={(v) => set('stuntPwrRevRevMs', v)} />
+        <SliderField label="Drive PWM" value={local.stuntPwrRevPwm}
+          min={0} max={255}
+          onChange={(v) => set('stuntPwrRevPwm', v)} />
+      </StuntCard>
+
+      <div className="sticky bottom-4 z-10">
+        <div className="card p-3 flex items-center justify-end gap-2 ring-white/10">
+          <span className="text-xs text-ink-400 mr-auto">
+            Edits apply to the <em>next</em> stunt run.
+          </span>
+          <button onClick={() => setLocal(cfg)} disabled={!isDirty(cfg, local) || saving}
+            className="px-4 h-10 rounded-xl bg-[#0f0f11] ring-1 ring-[#26262e]
+                       text-ink-300 hover:text-white disabled:opacity-50">
+            Reset
+          </button>
+          <button onClick={() => save(diff(cfg, local))}
+            disabled={!isDirty(cfg, local) || saving}
+            className="px-5 h-10 rounded-xl bg-lime-500 text-ink-950 font-semibold
+                       hover:bg-lime-400 disabled:opacity-50 active:scale-[0.98]">
+            {saving ? 'Saving…' : 'Save changes'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function StuntCard({ title, blurb, experimental, children }: {
+  title: string
+  blurb: string
+  experimental?: boolean
+  children: React.ReactNode
+}) {
+  return (
+    <div className="card p-6">
+      <div className="flex items-baseline justify-between mb-1">
+        <h3 className="text-white font-medium">{title}</h3>
+        {experimental && <span className="pill pill-muted">experimental</span>}
+      </div>
+      <p className="text-xs text-ink-400 mb-4">{blurb}</p>
+      <div className="grid gap-4 md:grid-cols-2">
+        {children}
+      </div>
+    </div>
+  )
+}
+
+function isDirty(a: DeviceConfig, b: DeviceConfig): boolean {
+  return JSON.stringify(a) !== JSON.stringify(b)
 }
 
 /* --------------------------------------------------------------------- */

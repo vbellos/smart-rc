@@ -3,6 +3,7 @@
 #include <string.h>
 
 #include "control/Safety.h"
+#include "control/Stunts.h"
 #include "motors/Drive.h"
 #include "motors/Steering.h"
 
@@ -30,6 +31,10 @@ Command CommandHandler::parse(const char* action) {
 
 CommandResult CommandHandler::execute(Command cmd, uint8_t speed) {
     if (!drive_ || !steering_ || !safety_) return {false, "not initialised"};
+
+    // Any user-issued command cancels a running stunt — scripted maneuvers
+    // yield to direct control the moment you press a key / button.
+    if (stunts_ && stunts_->isRunning()) stunts_->abort();
 
     // ClearEmergency is the only command we accept while latched.
     if (safety_->isEmergency() && cmd != Command::ClearEmergency) {

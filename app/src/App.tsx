@@ -6,6 +6,7 @@ import DrivePage from './pages/DrivePage'
 import MonitorPage from './pages/MonitorPage'
 import ConfigPage from './pages/ConfigPage'
 import SetupPage from './pages/SetupPage'
+import StuntsPage from './pages/StuntsPage'
 import type { PropsWithChildren } from 'react'
 
 /** Routes that require an active device connection. */
@@ -27,6 +28,7 @@ export default function App() {
           <Route element={<AppShell />}>
             <Route path="/drive"   element={<RequireDevice><DrivePage /></RequireDevice>} />
             <Route path="/monitor" element={<RequireDevice><MonitorPage /></RequireDevice>} />
+            <Route path="/stunts"  element={<RequireDevice><StuntsPage /></RequireDevice>} />
             <Route path="/config"  element={<RequireDevice><ConfigPage /></RequireDevice>} />
             <Route path="/setup"   element={<RequireDevice><SetupPage /></RequireDevice>} />
           </Route>

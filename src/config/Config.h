@@ -81,6 +81,41 @@ struct Config {
     //   gaps of 300-900 ms happen on congested APs), but low enough
     //   that a genuinely-disconnected client stops the vehicle quickly.
     uint16_t heartbeatTimeoutMs = 1500;
+
+    // -------------------------------------------------------------------
+    // Stunts — per-stunt timing & PWM tunables. All live-applied on save.
+    // -------------------------------------------------------------------
+
+    // Spin (L/R): full-lock + full throttle, terminated by gyro once the
+    // integrated |yaw| exceeds targetDeg. <360 undershoots, >360
+    // overshoots (useful to compensate for motor run-on after cut).
+    uint16_t stuntSpinTargetDeg   = 340;     // 90..720
+    uint16_t stuntSpinTimeoutMs   = 2500;    // 500..10000
+    uint8_t  stuntSpinPwm         = 255;
+
+    // J-turn: fwd accel -> lock steer -> hard brake -> reverse w/ locked wheels.
+    uint16_t stuntJturnFwdMs      = 700;
+    uint16_t stuntJturnBrakeMs    = 300;
+    uint16_t stuntJturnRevMs      = 900;
+    uint8_t  stuntJturnPwm        = 255;
+
+    // Wiggle: fwd kick + N full-swing L/R steering cycles (drive stays on).
+    uint16_t stuntWiggleKickMs    = 150;
+    uint16_t stuntWiggleHoldMs    = 280;     // per steer flick
+    uint8_t  stuntWiggleCycles    = 3;       // 1..8 L-R pairs
+    uint8_t  stuntWigglePwm       = 255;
+
+    // Drift (L/R): entry fwd -> hard lock -> sustained throttle -> counter.
+    uint16_t stuntDriftFwd1Ms     = 300;
+    uint16_t stuntDriftLockMs     = 400;
+    uint16_t stuntDriftCounterMs  = 300;
+    uint8_t  stuntDriftPwm        = 255;
+
+    // Power reverse: fwd -> brake -> reverse.
+    uint16_t stuntPwrRevFwdMs     = 600;
+    uint16_t stuntPwrRevBrakeMs   = 250;
+    uint16_t stuntPwrRevRevMs     = 700;
+    uint8_t  stuntPwrRevPwm       = 255;
 };
 
 // Load config from NVS, applying built-in defaults for missing keys.

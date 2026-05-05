@@ -11,6 +11,7 @@ class CommandHandler;
 class Drive;
 class Steering;
 class Safety;
+class StuntEngine;
 
 // Bundles all the dependencies the portal needs to render status,
 // edit config, and dispatch commands.
@@ -21,6 +22,7 @@ struct PortalDeps {
     Drive*           drive;
     Steering*        steering;
     Safety*          safety;
+    StuntEngine*     stunts;
 };
 
 class Portal {
@@ -48,12 +50,14 @@ private:
     void handleResetNetwork   (AsyncWebServerRequest* req);
     void handleResetFactory   (AsyncWebServerRequest* req);
     void handleImuCalibrate   (AsyncWebServerRequest* req);
+    void handleStuntAbort     (AsyncWebServerRequest* req);
     void handleNotFound       (AsyncWebServerRequest* req);
 
     // JSON-body POST handlers: the async JSON helper delivers the parsed body.
     void handlePostConfig     (AsyncWebServerRequest* req, JsonVariant& body);
     void handleControl        (AsyncWebServerRequest* req, JsonVariant& body);
     void handleWifiProvision  (AsyncWebServerRequest* req, JsonVariant& body);
+    void handleStunt          (AsyncWebServerRequest* req, JsonVariant& body);
 
     PortalDeps      deps_{};
     AsyncWebServer  server_{80};

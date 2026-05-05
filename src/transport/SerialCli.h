@@ -10,6 +10,7 @@ class Drive;
 class Steering;
 class Safety;
 class NetworkManager;
+class StuntEngine;
 
 struct SerialCliDeps {
     Config*         config;
@@ -18,6 +19,7 @@ struct SerialCliDeps {
     Steering*       steering;
     Safety*         safety;
     NetworkManager* network;
+    StuntEngine*    stunts;
 };
 
 // Interactive serial console. Lets you drive the RC, inspect config,
@@ -66,6 +68,7 @@ private:
     void cmdI2cScan();
     void cmdImu();
     void cmdImuWatch(const String* argv, int argc);
+    void cmdStunt(const String* argv, int argc);
 
     // Background streaming state for `imu watch`.
     bool     watchActive_  = false;

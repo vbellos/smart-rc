@@ -6,6 +6,7 @@
 #include "config/Config.h"
 #include "control/CommandHandler.h"
 #include "control/Safety.h"
+#include "control/Stunts.h"
 #include "motors/Drive.h"
 #include "motors/Steering.h"
 #include "network/NetworkManager.h"
@@ -76,6 +77,8 @@ void Portal::registerRoutes() {
                [this](AsyncWebServerRequest* r) { handleResetFactory(r); });
     server_.on("/api/imu/calibrate", HTTP_POST,
                [this](AsyncWebServerRequest* r) { handleImuCalibrate(r); });
+    server_.on("/api/stunt/abort",   HTTP_POST,
+               [this](AsyncWebServerRequest* r) { handleStuntAbort(r); });
 
     // ---- JSON-body POSTs ---------------------------------------------------
     // AsyncCallbackJsonWebHandler buffers the chunked body, parses once, and
@@ -94,6 +97,11 @@ void Portal::registerRoutes() {
         [this](AsyncWebServerRequest* r, JsonVariant& j) { handleWifiProvision(r, j); });
     postProv->setMaxContentLength(512);
     server_.addHandler(postProv);
+
+    auto* postStunt = new AsyncCallbackJsonWebHandler("/api/stunt",
+        [this](AsyncWebServerRequest* r, JsonVariant& j) { handleStunt(r, j); });
+    postStunt->setMaxContentLength(128);
+    server_.addHandler(postStunt);
 
     server_.onNotFound([this](AsyncWebServerRequest* r) { handleNotFound(r); });
 }
@@ -167,6 +175,28 @@ void Portal::handleGetConfig(AsyncWebServerRequest* req) {
     doc["imuInvertX"]         = c.imuInvertX;
     doc["imuInvertY"]         = c.imuInvertY;
     doc["imuInvertZ"]         = c.imuInvertZ;
+
+    // Stunt tunables — per-stunt timings & PWM values.
+    doc["stuntSpinTargetDeg"]  = c.stuntSpinTargetDeg;
+    doc["stuntSpinTimeoutMs"]  = c.stuntSpinTimeoutMs;
+    doc["stuntSpinPwm"]        = c.stuntSpinPwm;
+    doc["stuntJturnFwdMs"]     = c.stuntJturnFwdMs;
+    doc["stuntJturnBrakeMs"]   = c.stuntJturnBrakeMs;
+    doc["stuntJturnRevMs"]     = c.stuntJturnRevMs;
+    doc["stuntJturnPwm"]       = c.stuntJturnPwm;
+    doc["stuntWiggleKickMs"]   = c.stuntWiggleKickMs;
+    doc["stuntWiggleHoldMs"]   = c.stuntWiggleHoldMs;
+    doc["stuntWiggleCycles"]   = c.stuntWiggleCycles;
+    doc["stuntWigglePwm"]      = c.stuntWigglePwm;
+    doc["stuntDriftFwd1Ms"]    = c.stuntDriftFwd1Ms;
+    doc["stuntDriftLockMs"]    = c.stuntDriftLockMs;
+    doc["stuntDriftCounterMs"] = c.stuntDriftCounterMs;
+    doc["stuntDriftPwm"]       = c.stuntDriftPwm;
+    doc["stuntPwrRevFwdMs"]    = c.stuntPwrRevFwdMs;
+    doc["stuntPwrRevBrakeMs"]  = c.stuntPwrRevBrakeMs;
+    doc["stuntPwrRevRevMs"]    = c.stuntPwrRevRevMs;
+    doc["stuntPwrRevPwm"]      = c.stuntPwrRevPwm;
+
     sendJsonDoc(req, 200, doc);
 }
 
@@ -200,6 +230,33 @@ void Portal::handlePostConfig(AsyncWebServerRequest* req, JsonVariant& body) {
     if (body["imuInvertX"].is<bool>()) c.imuInvertX = body["imuInvertX"].as<bool>();
     if (body["imuInvertY"].is<bool>()) c.imuInvertY = body["imuInvertY"].as<bool>();
     if (body["imuInvertZ"].is<bool>()) c.imuInvertZ = body["imuInvertZ"].as<bool>();
+
+    // Stunt tunables (clamping broad ranges — UI enforces tighter too).
+    auto u16Field = [&](const char* key, uint16_t& dst, int lo, int hi) {
+        if (body[key].is<int>()) dst = (uint16_t)constrain((int)body[key], lo, hi);
+    };
+    auto u8Field = [&](const char* key, uint8_t& dst, int lo, int hi) {
+        if (body[key].is<int>()) dst = (uint8_t)constrain((int)body[key], lo, hi);
+    };
+    u16Field("stuntSpinTargetDeg",  c.stuntSpinTargetDeg,  90, 720);
+    u16Field("stuntSpinTimeoutMs",  c.stuntSpinTimeoutMs,  500, 10000);
+    u8Field ("stuntSpinPwm",        c.stuntSpinPwm,        0, 255);
+    u16Field("stuntJturnFwdMs",     c.stuntJturnFwdMs,     50, 3000);
+    u16Field("stuntJturnBrakeMs",   c.stuntJturnBrakeMs,   50, 1500);
+    u16Field("stuntJturnRevMs",     c.stuntJturnRevMs,     50, 3000);
+    u8Field ("stuntJturnPwm",       c.stuntJturnPwm,       0, 255);
+    u16Field("stuntWiggleKickMs",   c.stuntWiggleKickMs,   50, 1000);
+    u16Field("stuntWiggleHoldMs",   c.stuntWiggleHoldMs,   50, 800);
+    u8Field ("stuntWiggleCycles",   c.stuntWiggleCycles,   1, 8);
+    u8Field ("stuntWigglePwm",      c.stuntWigglePwm,      0, 255);
+    u16Field("stuntDriftFwd1Ms",    c.stuntDriftFwd1Ms,    50, 2000);
+    u16Field("stuntDriftLockMs",    c.stuntDriftLockMs,    50, 2000);
+    u16Field("stuntDriftCounterMs", c.stuntDriftCounterMs, 50, 1500);
+    u8Field ("stuntDriftPwm",       c.stuntDriftPwm,       0, 255);
+    u16Field("stuntPwrRevFwdMs",    c.stuntPwrRevFwdMs,    50, 2500);
+    u16Field("stuntPwrRevBrakeMs",  c.stuntPwrRevBrakeMs,  50, 1500);
+    u16Field("stuntPwrRevRevMs",    c.stuntPwrRevRevMs,    50, 2500);
+    u8Field ("stuntPwrRevPwm",      c.stuntPwrRevPwm,      0, 255);
 
     const bool ok = saveConfig(c);
 
@@ -384,6 +441,30 @@ void Portal::handleImuCalibrate(AsyncWebServerRequest* req) {
     JsonDocument doc;
     doc["ok"]      = true;
     doc["message"] = "gyro bias re-sampled";
+    sendJsonDoc(req, 200, doc);
+}
+
+void Portal::handleStunt(AsyncWebServerRequest* req, JsonVariant& body) {
+    if (!deps_.stunts) {
+        JsonDocument err; err["ok"] = false; err["reason"] = "stunts disabled";
+        sendJsonDoc(req, 503, err);
+        return;
+    }
+    const char* name = body["name"].as<const char*>();
+    const bool ok = deps_.stunts->startByName(name);
+    JsonDocument resp;
+    resp["ok"] = ok;
+    if (ok) {
+        resp["stunt"] = name;
+    } else {
+        resp["reason"] = name ? "unknown stunt" : "missing name";
+    }
+    sendJsonDoc(req, ok ? 200 : 400, resp);
+}
+
+void Portal::handleStuntAbort(AsyncWebServerRequest* req) {
+    if (deps_.stunts) deps_.stunts->abort();
+    JsonDocument doc; doc["ok"] = true; doc["message"] = "stunt aborted";
     sendJsonDoc(req, 200, doc);
 }
 

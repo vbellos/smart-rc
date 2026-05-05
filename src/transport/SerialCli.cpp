@@ -8,6 +8,7 @@
 #include "motors/Drive.h"
 #include "motors/Steering.h"
 #include "network/NetworkManager.h"
+#include "control/Stunts.h"
 #include "sensors/Sensors.h"
 #include "sensors/Mpu6050.h"
 
@@ -129,7 +130,10 @@ void SerialCli::printHelp() {
         "  i2c scan                   probe I2C bus for devices\n"
         "  imu                        print current IMU reading\n"
         "  imu calibrate              re-sample gyro bias (hold still ~2s)\n"
-        "  imu watch [sec]            stream ax/ay/az/vx every 100ms (default 6s)\n");
+        "  imu watch [sec]            stream ax/ay/az/vx every 100ms (default 6s)\n"
+        "  stunt <name> | abort       run scripted maneuver (spin_left / spin_right /\n"
+        "                             j_turn_left / j_turn_right / wiggle /\n"
+        "                             drift_left / drift_right / power_reverse)\n");
 }
 
 void SerialCli::processLine(const String& line) {
@@ -172,6 +176,7 @@ void SerialCli::processLine(const String& line) {
     }
     else if (cmd == "imu" && n >= 2 && tok[1] == "watch")  cmdImuWatch(tok, n);
     else if (cmd == "imu")        cmdImu();
+    else if (cmd == "stunt")      cmdStunt(tok, n);
 
     else                          Serial.printf("unknown: %s (type 'help')\n", cmd.c_str());
 
@@ -355,6 +360,22 @@ void SerialCli::cmdImu() {
                   (int)m.gyroCalibrated());
     Serial.printf("velocity X    %+6.3f m/s   stationary=%d\n",
                   m.velocityX(), (int)m.isStationary());
+}
+
+void SerialCli::cmdStunt(const String* argv, int argc) {
+    if (!deps_.stunts) { Serial.println("stunts not wired"); return; }
+    if (argc < 2) {
+        Serial.printf("running: %s (state=%d)\n",
+                      deps_.stunts->currentName(), (int)deps_.stunts->isRunning());
+        return;
+    }
+    if (argv[1] == "abort") {
+        deps_.stunts->abort();
+        Serial.println("aborted");
+        return;
+    }
+    const bool ok = deps_.stunts->startByName(argv[1].c_str());
+    Serial.printf("stunt %s -> %s\n", argv[1].c_str(), ok ? "ok" : "unknown");
 }
 
 void SerialCli::cmdImuWatch(const String* argv, int argc) {

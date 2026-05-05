@@ -1,11 +1,12 @@
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 import type { ReactNode } from 'react'
 import { useDevice } from '../context/DeviceContext'
-import { Compass, Gauge, Radio, Settings, Plug, Check } from './Icons'
+import { Compass, Gauge, Radio, Settings, Plug, Check, Sparkle } from './Icons'
 import { KeyboardToggle } from './KeyboardToggle'
 
 const navItems = [
   { to: '/drive',   label: 'Drive',   icon: Compass,  tone: 'bg-lime-500/15 text-lime-400 ring-lime-500/25' },
+  { to: '/stunts',  label: 'Stunts',  icon: Sparkle,  tone: 'bg-rose-500/15 text-rose-400 ring-rose-500/25' },
   { to: '/monitor', label: 'Monitor', icon: Gauge,    tone: 'bg-sky-500/15 text-sky-400 ring-sky-500/25' },
   { to: '/setup',   label: 'Setup',   icon: Check,    tone: 'bg-amber-400/15 text-amber-400 ring-amber-400/25' },
   { to: '/config',  label: 'Config',  icon: Settings, tone: 'bg-violet-500/15 text-violet-400 ring-violet-500/25' },

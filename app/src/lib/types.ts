@@ -53,6 +53,27 @@ export interface DeviceConfig {
   imuInvertZ: boolean
   activeBrakePwm: number
   activeBrakeMaxMs: number
+
+  // Stunts — per-stunt tunables
+  stuntSpinTargetDeg: number
+  stuntSpinTimeoutMs: number
+  stuntSpinPwm: number
+  stuntJturnFwdMs: number
+  stuntJturnBrakeMs: number
+  stuntJturnRevMs: number
+  stuntJturnPwm: number
+  stuntWiggleKickMs: number
+  stuntWiggleHoldMs: number
+  stuntWiggleCycles: number
+  stuntWigglePwm: number
+  stuntDriftFwd1Ms: number
+  stuntDriftLockMs: number
+  stuntDriftCounterMs: number
+  stuntDriftPwm: number
+  stuntPwrRevFwdMs: number
+  stuntPwrRevBrakeMs: number
+  stuntPwrRevRevMs: number
+  stuntPwrRevPwm: number
 }
 
 export interface WifiNetwork {

@@ -6,6 +6,7 @@
 #include "config/Config.h"
 #include "control/CommandHandler.h"
 #include "control/Safety.h"
+#include "control/Stunts.h"
 #include "motors/Drive.h"
 #include "motors/MotorDriver.h"
 #include "motors/Steering.h"
@@ -22,6 +23,7 @@ smartrc::Drive          g_drive;
 smartrc::Steering       g_steering;
 smartrc::Safety         g_safety;
 smartrc::CommandHandler g_commands;
+smartrc::StuntEngine    g_stunts;
 smartrc::NetworkManager g_net;
 smartrc::Portal         g_portal;
 smartrc::WsServer       g_ws;
@@ -52,6 +54,7 @@ void setup() {
     // 4. Safety + command pipeline.
     g_safety.begin(&g_drive, &g_steering, g_cfg.heartbeatTimeoutMs);
     g_commands.begin(&g_drive, &g_steering, &g_safety);
+    g_commands.setStunts(&g_stunts);    // so user commands abort stunts
 
     // 5. I²C bus + sensors. Wire.begin() must run before sensors::begin()
     //    because the MPU6050 driver talks over it during its probe.
@@ -65,6 +68,16 @@ void setup() {
     g_drive.setActiveBrakePwm(g_cfg.activeBrakePwm);
     g_drive.setActiveBrakeMaxMs(g_cfg.activeBrakeMaxMs);
 
+    // Stunt engine — scripted maneuvers (spin, j-turn, wiggle, drift,
+    // power-reverse). Uses IMU gyro z for spin completion detection.
+    g_stunts.begin({
+        .drive    = &g_drive,
+        .steering = &g_steering,
+        .safety   = &g_safety,
+        .imu      = &smartrc::sensors::imu(),
+        .config   = &g_cfg,
+    });
+
     // 6. Networking — STA with AP fallback.
     g_net.begin(g_cfg);
 
@@ -76,6 +89,7 @@ void setup() {
         .drive    = &g_drive,
         .steering = &g_steering,
         .safety   = &g_safety,
+        .stunts   = &g_stunts,
     });
 
     // 8. WebSocket transport on the SAME :80 listener (Phase 2+).
@@ -86,6 +100,7 @@ void setup() {
         .steering = &g_steering,
         .safety   = &g_safety,
         .network  = &g_net,
+        .stunts   = &g_stunts,
     });
 
     // 9. mDNS so mobile/web clients can find us at `<hostname>.local`
@@ -111,6 +126,7 @@ void setup() {
         .steering = &g_steering,
         .safety   = &g_safety,
         .network  = &g_net,
+        .stunts   = &g_stunts,
     });
 
     Serial.println("[boot] ready");
@@ -122,6 +138,7 @@ void loop() {
     g_ws.update();         // telemetry push + event polling
     g_cli.update();        // serial console
     smartrc::sensors::update();   // pump IMU before Drive reads velocity
+    g_stunts.update();            // scripted maneuver state machine
     g_drive.update();             // active-brake tick
     g_steering.update();
     g_safety.update();
