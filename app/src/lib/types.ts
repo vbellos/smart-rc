@@ -16,6 +16,10 @@ export interface DeviceStatus {
   }
   motors: {
     drive_moving: boolean
+    /** True while Drive::brake() is decelerating the car via the
+     *  IMU-aware active-brake state machine. Drive commands are
+     *  rejected by CommandHandler during this window. */
+    drive_active_braking?: boolean
     steer_state: number
     steer_last_dir: number
   }
@@ -102,7 +106,7 @@ export interface HelloFrame {
 export interface TelemetryFrame {
   t: 'telemetry'
   ts: number
-  drive: { moving: boolean }
+  drive: { moving: boolean; active_braking?: boolean }
   steer: { state: number; lastDir: number }
   safety: { emergency: boolean; stale: boolean }
   net: { mode: number; rssi: number }

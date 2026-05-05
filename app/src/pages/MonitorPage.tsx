@@ -30,7 +30,10 @@ export default function MonitorPage() {
 
   const rssi = t?.net.rssi ?? status?.net.rssi ?? 0
   const heapFree = status?.heap_free ?? 0
-  const driveMoving = t?.drive.moving ?? false
+  const driveMoving   = t?.drive.moving ?? false
+  const activeBraking = t?.drive.active_braking
+                     ?? status?.motors.drive_active_braking
+                     ?? false
   const steerState = steerStateLabel(t?.steer.state)
   const steerDir = SteerDirName[t?.steer.lastDir ?? 0]
   const autoBrake = t?.auto_brake ?? status?.auto_brake
@@ -92,8 +95,9 @@ export default function MonitorPage() {
           />
           <StatCard
             eyebrow="Drive"
-            value={driveMoving ? 'MOVING' : 'IDLE'}
-            tone={driveMoving ? 'ok' : 'neutral'}
+            value={activeBraking ? 'BRAKING' : driveMoving ? 'MOVING' : 'IDLE'}
+            tone={activeBraking ? 'warn' : driveMoving ? 'ok' : 'neutral'}
+            sub={activeBraking ? 'commands locked' : undefined}
             icon={<Gauge className="size-4" />}
           />
           <StatCard

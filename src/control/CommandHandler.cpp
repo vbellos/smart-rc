@@ -39,6 +39,26 @@ CommandResult CommandHandler::execute(Command cmd, uint8_t speed) {
         return {false, "emergency latched"};
     }
 
+    // While an active brake is decelerating the car, reject new drive
+    // commands so the driver can't override (and effectively cancel) the
+    // brake mid-stop. Brake is short — typically <500 ms — and the brake
+    // state machine has its own hard timeout (activeBrakeMaxMs), so the
+    // window the user is locked out of is bounded. Steering, e-stop and
+    // clear-emergency remain available throughout. Heartbeat is still
+    // notified — the user is connected and tapping, just blocked.
+    if (drive_->isActiveBraking()) {
+        switch (cmd) {
+            case Command::Forward:
+            case Command::Reverse:
+            case Command::Stop:
+            case Command::Brake:
+                safety_->notifyHeartbeat();
+                return {false, "active brake in progress"};
+            default:
+                break;
+        }
+    }
+
     switch (cmd) {
         case Command::Forward:
             // Reject drive into a close obstacle on the matching side.

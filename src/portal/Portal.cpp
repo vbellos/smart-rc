@@ -126,9 +126,10 @@ void Portal::handleStatus(AsyncWebServerRequest* req) {
     net["connected"] = deps_.network->isConnected();
 
     auto motors = doc["motors"].to<JsonObject>();
-    motors["drive_moving"]   = deps_.drive->isMoving();
-    motors["steer_state"]    = (int)deps_.steering->state();
-    motors["steer_last_dir"] = (int)deps_.steering->lastDirection();
+    motors["drive_moving"]         = deps_.drive->isMoving();
+    motors["drive_active_braking"] = deps_.drive->isActiveBraking();
+    motors["steer_state"]          = (int)deps_.steering->state();
+    motors["steer_last_dir"]       = (int)deps_.steering->lastDirection();
 
     auto safety = doc["safety"].to<JsonObject>();
     safety["emergency"] = deps_.safety->isEmergency();

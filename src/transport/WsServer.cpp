@@ -221,7 +221,8 @@ void WsServer::sendPong(AsyncWebSocketClient* client, long id) {
 
 void WsServer::buildTelemetryJson(JsonDocument& doc) {
     auto drive = doc["drive"].to<JsonObject>();
-    drive["moving"] = deps_.drive->isMoving();
+    drive["moving"]         = deps_.drive->isMoving();
+    drive["active_braking"] = deps_.drive->isActiveBraking();
 
     auto steer = doc["steer"].to<JsonObject>();
     steer["state"]   = (int)deps_.steering->state();

@@ -13,7 +13,10 @@ export default function DrivePage() {
   const staleDrops = events.filter((e) => e.kind === 'stale_timeout').length
   const { status, api } = useDevice()
   const rssi = t?.net.rssi ?? status?.net.rssi ?? 0
-  const driveMoving = t?.drive.moving ?? false
+  const driveMoving   = t?.drive.moving ?? false
+  const activeBraking = t?.drive.active_braking
+                     ?? status?.motors.drive_active_braking
+                     ?? false
   const steerState  = steerStateLabel(t?.steer.state)
   const steerDir    = SteerDirName[t?.steer.lastDir ?? 0]
   const stale       = t?.safety.stale ?? false
@@ -45,8 +48,9 @@ export default function DrivePage() {
           <div className="grid grid-cols-2 gap-3">
             <StatCard
               eyebrow="Drive"
-              value={driveMoving ? 'ON' : 'IDLE'}
-              tone={driveMoving ? 'ok' : 'neutral'}
+              value={activeBraking ? 'BRAKING' : driveMoving ? 'ON' : 'IDLE'}
+              tone={activeBraking ? 'warn' : driveMoving ? 'ok' : 'neutral'}
+              sub={activeBraking ? 'commands locked' : undefined}
             />
             <StatCard
               eyebrow="Steering"

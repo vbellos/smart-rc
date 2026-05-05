@@ -80,10 +80,13 @@ private:
     };
 
     // Evaluate one side. `speedTowardObstacle` is the positive component
-    // of vx in the side's "looking" direction (so for the rear it's -vx).
+    // of vx in the side's "looking" direction (for the rear it's -vx).
+    // Computes trigger/release thresholds, applies hysteresis, fires the
+    // brake, and updates SideState. Reads distanceCm even when invalid
+    // so the surfaced state is consistent (set to 0xFFFF beforehand).
     void evaluate(Side which, SideState& s,
-                  float speedTowardObstacle, bool obstacleClose,
-                  uint16_t distanceCm);
+                  float speedTowardObstacle,
+                  bool distanceValid, uint16_t distanceCm);
 
     Drive*                     drive_ = nullptr;
     sensors::DistanceSensors*  dist_  = nullptr;

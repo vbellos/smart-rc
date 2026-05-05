@@ -11,6 +11,14 @@ namespace smartrc {
 namespace {
 constexpr uint32_t kBrakeRepeatMs = 200;
 
+// Hysteresis multiplier: once engaged, stay engaged until distance
+// exceeds baseCm * this. Prevents the "creep + brake" loop where the
+// user holds throttle, brake fires, car stops just past the trigger
+// distance, brake disengages, motor drives forward again, etc.
+// 1.5 means a base of 20 cm releases at 30 cm — 10 cm of margin, scaled
+// to whatever the user has tuned the base to.
+constexpr float kReleaseMultiplier = 1.5f;
+
 const char* sideLabel(AutoBrake::Side s) {
     return (s == AutoBrake::Front) ? "front" : "rear";
 }
@@ -52,43 +60,65 @@ void AutoBrake::update() {
     // Forward velocity sign convention: +vx = forward, -vx = reverse.
     const float vx = imu_->velocityX();
 
-    // Front side: only evaluate when moving forward.
-    {
-        const float vFwd = vx > 0.0f ? vx : 0.0f;
-        front_.triggerCm  = front_.baseCm +
-                            (uint16_t)((front_.slopeCmPerMs * vFwd) + 0.5f);
-        front_.distanceCm = f_cm;
-        const uint16_t v_cmps = (uint16_t)((vFwd * 100.0f) + 0.5f);
-        const bool moving    = v_cmps >= front_.minSpeedCmPs;
-        const bool close     = f_ok && f_cm <= front_.triggerCm;
-        evaluate(Front, front_, vFwd, moving && close, f_cm);
-    }
-
-    // Rear side: only evaluate when moving backward.
-    {
-        const float vRev = vx < 0.0f ? -vx : 0.0f;
-        rear_.triggerCm  = rear_.baseCm +
-                           (uint16_t)((rear_.slopeCmPerMs * vRev) + 0.5f);
-        rear_.distanceCm = r_cm;
-        const uint16_t v_cmps = (uint16_t)((vRev * 100.0f) + 0.5f);
-        const bool moving    = v_cmps >= rear_.minSpeedCmPs;
-        const bool close     = r_ok && r_cm <= rear_.triggerCm;
-        evaluate(Rear, rear_, vRev, moving && close, r_cm);
-    }
+    // Front side: positive vx is forward (toward the front sensor).
+    evaluate(Front, front_, vx > 0.0f ? vx : 0.0f, f_ok, f_cm);
+    // Rear side: negative vx is reverse (toward the rear sensor).
+    evaluate(Rear,  rear_,  vx < 0.0f ? -vx : 0.0f, r_ok, r_cm);
 }
 
 void AutoBrake::evaluate(Side which, SideState& s,
-                         float speedTowardObstacle, bool shouldEngage,
+                         float speedTowardObstacle, bool distanceValid,
                          uint16_t distanceCm) {
+    // Compute trigger and release thresholds.
+    //   trigger = base + slope * |speed|   ← scales with how fast we're approaching
+    //   release = base * 1.5               ← fixed hysteresis ceiling
+    s.triggerCm  = s.baseCm +
+                   (uint16_t)((s.slopeCmPerMs * speedTowardObstacle) + 0.5f);
+    s.distanceCm = distanceCm;
+    const uint16_t releaseCm = (uint16_t)(s.baseCm * kReleaseMultiplier);
+
+    // Engagement decision differs based on current state — it's the
+    // hysteresis band that prevents bouncing between engaged/released
+    // as the car decelerates past the trigger.
+    bool shouldEngage = false;
+    if (distanceValid) {
+        if (s.engaged) {
+            // Already engaged — hold until obstacle is clearly past the
+            // release threshold. This is what keeps the car locked when
+            // the user is holding throttle into a stationary obstacle:
+            // brake fires, car stops, distance is still inside release,
+            // we stay engaged, CommandHandler keeps rejecting forward.
+            shouldEngage = distanceCm <= releaseCm;
+        } else {
+            // Not engaged yet — two paths to engagement:
+            //   a) actively closing on the obstacle fast enough to need
+            //      stopping room (distance < trigger AND moving), or
+            //   b) parked too close already (distance < base) — arm
+            //      immediately so the next throttle press is rejected
+            //      and the car can't even start moving toward it.
+            const uint16_t v_cmps =
+                (uint16_t)((speedTowardObstacle * 100.0f) + 0.5f);
+            const bool moving       = v_cmps >= s.minSpeedCmPs;
+            const bool approachClose = distanceCm <= s.triggerCm;
+            const bool tooCloseAtRest = distanceCm <= s.baseCm;
+            shouldEngage = (moving && approachClose) || tooCloseAtRest;
+        }
+    }
+
     if (shouldEngage) {
         const uint32_t now = millis();
         if (!s.engaged) {
             s.engaged    = true;
             lastBrakeMs_ = now;
-            drive_->brake();
+            // Only call brake() if the car is actually moving. A parked
+            // car with an obstacle in front shouldn't fire a spurious
+            // active-brake event — Drive::brake() would no-op anyway,
+            // but we also want a clean log.
+            if (drive_->isMoving()) drive_->brake();
             Serial.printf(
                 "[autobrake.%s] ENGAGED  d=%u cm  trigger=%u cm  v=%.2f m/s\n",
-                sideLabel(which), distanceCm, s.triggerCm, speedTowardObstacle);
+                sideLabel(which), distanceCm, s.triggerCm,
+                speedTowardObstacle);
         } else if (drive_->isMoving() && (now - lastBrakeMs_ >= kBrakeRepeatMs)) {
             drive_->brake();
             lastBrakeMs_ = now;
