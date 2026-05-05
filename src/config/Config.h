@@ -44,20 +44,27 @@ struct Config {
     uint8_t  activeBrakePwm     = 220;  // 0..255, how hard to reverse
     uint16_t activeBrakeMaxMs   = 600;  // hard upper bound on brake time
 
-    // Auto-brake (obstacle-distance based forward-collision avoidance).
-    // When enabled and the vehicle is moving forward faster than
-    // autoBrakeMinSpeedCmPs, the front VL53L0X reading is compared to a
-    // speed-dependent trigger distance:
-    //     trigger_cm = autoBrakeBaseCm + autoBrakeSlopeCmPerMs * vx (m/s)
-    // If the obstacle is closer than that, AutoBrake calls Drive::brake()
-    // and CommandHandler rejects further `forward` commands until the
-    // vehicle stops or the obstacle clears. Reverse + steering remain
-    // available so the driver can back away. Does NOT latch — it's a
-    // continuous evaluation, not an e-stop.
-    bool     autoBrakeEnabled       = false;
-    uint16_t autoBrakeBaseCm        = 20;   // trigger distance at 0 m/s
-    uint16_t autoBrakeSlopeCmPerMs  = 30;   // extra cm per (m/s) of vx
-    uint16_t autoBrakeMinSpeedCmPs  = 10;   // ignore below 0.1 m/s
+    // Auto-brake (obstacle-distance based collision avoidance, both
+    // directions). Single master enable; per-side trigger params so the
+    // rear can be tuned more conservatively than the front (smaller
+    // sensor mounting clearance, slower top speed in reverse, etc.).
+    //
+    //     front: trigger_cm = frontBaseCm + frontSlopeCmPerMs * |vx|   (vx > 0)
+    //     rear : trigger_cm = rearBaseCm  + rearSlopeCmPerMs  * |vx|   (vx < 0)
+    //
+    // If an obstacle is closer than the side's trigger AND the vehicle is
+    // travelling faster than that side's min-speed gate, AutoBrake calls
+    // Drive::brake() and CommandHandler rejects further drive commands in
+    // the engaged direction. Reverse remains available when the front is
+    // engaged (and vice-versa) so the driver can back away. Does NOT
+    // latch — continuous evaluation, not an e-stop.
+    bool     autoBrakeEnabled            = false;
+    uint16_t autoBrakeFrontBaseCm        = 20;   // front trigger at 0 m/s
+    uint16_t autoBrakeFrontSlopeCmPerMs  = 30;   // extra cm per (m/s) forward
+    uint16_t autoBrakeFrontMinSpeedCmPs  = 10;   // ignore below 0.1 m/s fwd
+    uint16_t autoBrakeRearBaseCm         = 20;   // rear trigger at 0 m/s
+    uint16_t autoBrakeRearSlopeCmPerMs   = 30;   // extra cm per (m/s) reverse
+    uint16_t autoBrakeRearMinSpeedCmPs   = 10;   // ignore below 0.1 m/s rev
 
     // Swap electrical polarity without rewiring. Leaves the logical API
     // unchanged — "forward" still means forward from the driver's POV.

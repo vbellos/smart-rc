@@ -233,12 +233,21 @@ void WsServer::buildTelemetryJson(JsonDocument& doc) {
 
     if (deps_.autoBrake) {
         auto ab = doc["auto_brake"].to<JsonObject>();
-        ab["enabled"]    = deps_.autoBrake->enabled();
-        ab["engaged"]    = deps_.autoBrake->engaged();
-        ab["trigger_cm"] = deps_.autoBrake->triggerCm();
-        const uint16_t d = deps_.autoBrake->distanceCm();
-        if (d == 0xFFFF) ab["distance_cm"] = nullptr;
-        else             ab["distance_cm"] = d;
+        ab["enabled"] = deps_.autoBrake->enabled();
+        ab["engaged"] = deps_.autoBrake->engaged();
+
+        using AB = AutoBrake;
+        auto sideJson = [&](AB::Side side, JsonObject obj, bool active) {
+            obj["active"]     = active;
+            obj["trigger_cm"] = deps_.autoBrake->triggerCm(side);
+            const uint16_t d  = deps_.autoBrake->distanceCm(side);
+            if (d == 0xFFFF) obj["distance_cm"] = nullptr;
+            else             obj["distance_cm"] = d;
+        };
+        sideJson(AB::Front, ab["front"].to<JsonObject>(),
+                 deps_.autoBrake->activeFront());
+        sideJson(AB::Rear,  ab["rear"].to<JsonObject>(),
+                 deps_.autoBrake->activeRear());
     }
 
     auto net = doc["net"].to<JsonObject>();

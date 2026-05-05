@@ -7,24 +7,26 @@ namespace smartrc {
 class Drive;
 namespace sensors { class DistanceSensors; class Mpu6050; }
 
-// Forward-collision avoidance using the front VL53L0X.
+// Forward + rear collision avoidance using the front/rear VL53L0X.
 //
-// When enabled, on every loop tick we compute a speed-dependent trigger
-// distance:
+// On every loop tick each side independently computes a speed-dependent
+// trigger distance:
 //
-//     trigger_cm = baseCm + slopeCmPerMs * max(0, vx_ms)
+//     front trigger_cm = frontBase + frontSlope * max(0, +vx_ms)
+//     rear  trigger_cm = rearBase  + rearSlope  * max(0, -vx_ms)
 //
-// If the front reading is at-or-below that trigger AND the vehicle is
-// moving forward faster than minSpeedCmPs, we call Drive::brake() (which
-// uses the IMU-aware active-brake state machine to bring the car to rest)
-// and expose `engaged() == true` so CommandHandler can reject further
-// `forward` requests until either the vehicle stops or the obstacle moves
-// away. Reverse + steering remain available.
+// If a side's distance reading is at-or-below its trigger AND the vehicle
+// is travelling fast enough toward that side, AutoBrake calls
+// Drive::brake() and exposes activeFront() / activeRear() so the
+// CommandHandler can reject the matching `forward` or `reverse` request
+// until the vehicle settles or the obstacle moves.
 //
-// AutoBrake does NOT latch like Safety::emergencyStop(). It re-evaluates
-// every tick — disengage is automatic.
+// The opposite-direction command always remains available so the driver
+// can back away from the obstacle they're stuck on. Does NOT latch.
 class AutoBrake {
 public:
+    enum Side : uint8_t { Front = 0, Rear = 1, kCount = 2 };
+
     void begin(Drive* drive,
                sensors::DistanceSensors* dist,
                sensors::Mpu6050* imu);
@@ -32,44 +34,68 @@ public:
     /** Pump from loop(). Cheap when disabled. */
     void update();
 
-    void setEnabled(bool e) { enabled_ = e; if (!e) engaged_ = false; }
-    bool enabled() const    { return enabled_; }
+    void setEnabled(bool e);
+    bool enabled() const { return enabled_; }
 
-    /** Live tunables — applied without reboot from the portal/CLI. */
-    void setParams(uint16_t baseCm,
-                   uint16_t slopeCmPerMs,
-                   uint16_t minSpeedCmPs) {
-        baseCm_       = baseCm;
-        slopeCmPerMs_ = slopeCmPerMs;
-        minSpeedCmPs_ = minSpeedCmPs;
+    /** Live tunables, applied without reboot from the portal/CLI. */
+    void setFrontParams(uint16_t baseCm, uint16_t slopeCmPerMs,
+                        uint16_t minSpeedCmPs) {
+        front_.baseCm       = baseCm;
+        front_.slopeCmPerMs = slopeCmPerMs;
+        front_.minSpeedCmPs = minSpeedCmPs;
+    }
+    void setRearParams (uint16_t baseCm, uint16_t slopeCmPerMs,
+                        uint16_t minSpeedCmPs) {
+        rear_.baseCm       = baseCm;
+        rear_.slopeCmPerMs = slopeCmPerMs;
+        rear_.minSpeedCmPs = minSpeedCmPs;
     }
 
-    /** True while AutoBrake is actively forcing the brake. */
-    bool engaged() const     { return engaged_; }
+    /** True while EITHER side is forcing the brake. */
+    bool engaged() const { return front_.engaged || rear_.engaged; }
 
-    /** Most-recent computed trigger distance (cm). Useful for UI. */
-    uint16_t triggerCm() const { return triggerCm_; }
+    bool activeFront() const { return front_.engaged; }
+    bool activeRear()  const { return rear_.engaged;  }
 
-    /** Most-recent front distance read (cm). 0xFFFF if unknown. */
-    uint16_t distanceCm() const { return distanceCm_; }
+    /** Most-recent computed trigger distance for the named side (cm). */
+    uint16_t triggerCm(Side s) const {
+        return (s == Front) ? front_.triggerCm : rear_.triggerCm;
+    }
+
+    /** Most-recent distance read for the named side (cm); 0xFFFF unknown. */
+    uint16_t distanceCm(Side s) const {
+        return (s == Front) ? front_.distanceCm : rear_.distanceCm;
+    }
 
 private:
+    struct SideState {
+        // tunables
+        uint16_t baseCm        = 20;
+        uint16_t slopeCmPerMs  = 30;
+        uint16_t minSpeedCmPs  = 10;
+        // last evaluation
+        bool     engaged       = false;
+        uint16_t triggerCm     = 0;
+        uint16_t distanceCm    = 0xFFFF;
+    };
+
+    // Evaluate one side. `speedTowardObstacle` is the positive component
+    // of vx in the side's "looking" direction (so for the rear it's -vx).
+    void evaluate(Side which, SideState& s,
+                  float speedTowardObstacle, bool obstacleClose,
+                  uint16_t distanceCm);
+
     Drive*                     drive_ = nullptr;
     sensors::DistanceSensors*  dist_  = nullptr;
     sensors::Mpu6050*          imu_   = nullptr;
 
-    bool     enabled_     = false;
-    bool     engaged_     = false;
-    uint16_t baseCm_      = 20;
-    uint16_t slopeCmPerMs_= 30;
-    uint16_t minSpeedCmPs_= 10;
+    bool       enabled_     = false;
+    SideState  front_       = {};
+    SideState  rear_        = {};
 
-    // Last-evaluated state, surfaced via getters for telemetry/UI.
-    uint16_t triggerCm_   = 0;
-    uint16_t distanceCm_  = 0xFFFF;
-
-    // Rate-limit re-issuing brake() while engaged so we don't spam the
-    // active-brake state machine on every tick.
+    // Rate-limit re-issuing brake() so a transport that spams the
+    // forbidden direction can't tickle the active-brake state machine
+    // into starvation.
     uint32_t lastBrakeMs_ = 0;
 };
 

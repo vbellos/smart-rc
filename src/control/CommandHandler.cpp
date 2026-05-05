@@ -41,18 +41,23 @@ CommandResult CommandHandler::execute(Command cmd, uint8_t speed) {
 
     switch (cmd) {
         case Command::Forward:
-            // Reject forward into a close obstacle. Heartbeat still counts —
-            // the user is connected and trying, just blocked. Allowing the
-            // heartbeat keeps Safety from going stale and forcing an estop
-            // mid-recovery while the user backs out.
-            if (autoBrake_ && autoBrake_->engaged()) {
+            // Reject drive into a close obstacle on the matching side.
+            // Heartbeat still counts — the user is connected and trying,
+            // just blocked. Letting it through keeps Safety from going
+            // stale and forcing an estop mid-recovery while the driver
+            // backs out the other way.
+            if (autoBrake_ && autoBrake_->activeFront()) {
                 safety_->notifyHeartbeat();
-                return {false, "auto-brake engaged"};
+                return {false, "auto-brake engaged (front)"};
             }
             drive_->forward(speed);
             safety_->notifyHeartbeat();
             return {true, "forward"};
         case Command::Reverse:
+            if (autoBrake_ && autoBrake_->activeRear()) {
+                safety_->notifyHeartbeat();
+                return {false, "auto-brake engaged (rear)"};
+            }
             drive_->reverse(speed);
             safety_->notifyHeartbeat();
             return {true, "reverse"};

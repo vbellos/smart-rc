@@ -76,9 +76,12 @@ void setup() {
                       &smartrc::sensors::distance(),
                       &smartrc::sensors::imu());
     g_autoBrake.setEnabled(g_cfg.autoBrakeEnabled);
-    g_autoBrake.setParams(g_cfg.autoBrakeBaseCm,
-                          g_cfg.autoBrakeSlopeCmPerMs,
-                          g_cfg.autoBrakeMinSpeedCmPs);
+    g_autoBrake.setFrontParams(g_cfg.autoBrakeFrontBaseCm,
+                               g_cfg.autoBrakeFrontSlopeCmPerMs,
+                               g_cfg.autoBrakeFrontMinSpeedCmPs);
+    g_autoBrake.setRearParams (g_cfg.autoBrakeRearBaseCm,
+                               g_cfg.autoBrakeRearSlopeCmPerMs,
+                               g_cfg.autoBrakeRearMinSpeedCmPs);
 
     // 6. Networking — STA with AP fallback.
     g_net.begin(g_cfg);

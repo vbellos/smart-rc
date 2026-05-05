@@ -321,25 +321,22 @@ function DistanceCard({ series, data }: {
 function AutoBrakeCard({ ab }: { ab: AutoBrakeState }) {
   const state: 'off' | 'armed' | 'engaged' =
     !ab.enabled ? 'off' : ab.engaged ? 'engaged' : 'armed'
-  const ring   = state === 'engaged' ? 'ring-rose-500/40'
-               : state === 'armed'   ? 'ring-lime-500/30'
-               : 'ring-[#26262e]'
-  const tone   = state === 'engaged' ? 'text-rose-400'
-               : state === 'armed'   ? 'text-lime-400'
-               : 'text-ink-300'
-  const label  = state === 'engaged' ? 'ENGAGED'
-               : state === 'armed'   ? 'ARMED'
-               : 'OFF'
-  const dist = ab.distance_cm
-  const trig = ab.trigger_cm
+  const ring  = state === 'engaged' ? 'ring-rose-500/40'
+              : state === 'armed'   ? 'ring-lime-500/30'
+              : 'ring-[#26262e]'
+  const tone  = state === 'engaged' ? 'text-rose-400'
+              : state === 'armed'   ? 'text-lime-400'
+              : 'text-ink-300'
+  const label = state === 'engaged' ? 'ENGAGED'
+              : state === 'armed'   ? 'ARMED'
+              : 'OFF'
 
-  // Visual gauge — distance vs trigger. 0% = at trigger (about to engage),
-  // 100% = far (>= 2× trigger). Helps the user tune the slope while
-  // driving slowly toward an obstacle.
-  const ratio = dist == null ? 1 : Math.max(0, Math.min(1, (dist - trig) / Math.max(1, trig)))
-  const barColor = state === 'engaged' ? 'bg-rose-500'
-                 : state === 'armed'   ? 'bg-lime-400'
-                 : 'bg-ink-600'
+  // Which side(s) caused the engage, if any.
+  const engagedSide =
+    ab.front.active && ab.rear.active ? 'both'
+    : ab.front.active ? 'front'
+    : ab.rear.active  ? 'rear'
+    : null
 
   return (
     <div className={`card p-5 ring-1 ${ring}`}>
@@ -349,29 +346,55 @@ function AutoBrakeCard({ ab }: { ab: AutoBrakeState }) {
       </div>
       <div className="mt-3 flex items-baseline gap-3">
         <span className={`text-3xl font-semibold tabular-nums ${tone}`}>{label}</span>
-        {state !== 'off' && (
-          <span className="text-sm text-ink-300 tabular-nums">
-            {dist == null ? '— ' : `${dist} `}
-            <span className="text-ink-500">/ {trig} cm</span>
+        {engagedSide && (
+          <span className="text-xs uppercase tracking-wide text-rose-300">
+            via {engagedSide}
           </span>
         )}
       </div>
-      {state !== 'off' && (
-        <div className="mt-4">
-          <div className="h-1.5 rounded-full bg-[#1c1c22] overflow-hidden">
-            <div className={`h-full ${barColor} transition-all`}
-                 style={{ width: `${(1 - ratio) * 100}%` }}/>
-          </div>
-          <div className="mt-1.5 flex justify-between text-[10px] text-ink-500">
-            <span>at trigger</span><span>clear</span>
-          </div>
+
+      {state === 'off' ? (
+        <p className="text-xs text-ink-400 mt-3">
+          Enable from the Drive page, or Configuration → Motors &amp; Safety.
+        </p>
+      ) : (
+        <div className="mt-4 space-y-3">
+          <SideRow label="Front" side={ab.front} engaged={state === 'engaged'} />
+          <SideRow label="Rear"  side={ab.rear}  engaged={state === 'engaged'} />
         </div>
       )}
-      {state === 'off' && (
-        <p className="text-xs text-ink-400 mt-2">
-          Enable in Configuration → Motors &amp; Safety.
-        </p>
-      )}
+    </div>
+  )
+}
+
+function SideRow({ label, side, engaged }: {
+  label: 'Front' | 'Rear'
+  side: AutoBrakeState['front']
+  engaged: boolean
+}) {
+  const dist = side.distance_cm
+  const trig = side.trigger_cm
+  // 0% = at trigger (about to engage), 100% = far (>= 2× trigger).
+  const ratio = dist == null
+    ? 1
+    : Math.max(0, Math.min(1, (dist - trig) / Math.max(1, trig)))
+  const bar = side.active     ? 'bg-rose-500'
+            : !engaged        ? 'bg-lime-400'
+            : 'bg-ink-600'  // other side is engaged
+  const distLabel = dist == null
+    ? <span className="text-ink-500">no signal</span>
+    : <>{dist} <span className="text-ink-500">/ {trig} cm</span></>
+
+  return (
+    <div>
+      <div className="flex items-baseline justify-between mb-1.5">
+        <span className="text-xs text-ink-300">{label}</span>
+        <span className="text-xs tabular-nums text-ink-200">{distLabel}</span>
+      </div>
+      <div className="h-1.5 rounded-full bg-[#1c1c22] overflow-hidden">
+        <div className={`h-full ${bar} transition-all`}
+             style={{ width: `${(1 - ratio) * 100}%` }}/>
+      </div>
     </div>
   )
 }

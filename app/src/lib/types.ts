@@ -31,9 +31,17 @@ export interface DeviceStatus {
 
 export interface AutoBrakeState {
   enabled: boolean
+  /** True when EITHER side is currently forcing the brake. */
   engaged: boolean
+  front: AutoBrakeSide
+  rear:  AutoBrakeSide
+}
+
+export interface AutoBrakeSide {
+  /** True if this side is the one currently forcing the brake. */
+  active: boolean
   trigger_cm: number
-  /** Last front reading in cm; null when sensor invalid / absent. */
+  /** Last reading in cm; null when sensor invalid / absent. */
   distance_cm: number | null
 }
 
@@ -64,9 +72,12 @@ export interface DeviceConfig {
   activeBrakePwm: number
   activeBrakeMaxMs: number
   autoBrakeEnabled: boolean
-  autoBrakeBaseCm: number
-  autoBrakeSlopeCmPerMs: number
-  autoBrakeMinSpeedCmPs: number
+  autoBrakeFrontBaseCm: number
+  autoBrakeFrontSlopeCmPerMs: number
+  autoBrakeFrontMinSpeedCmPs: number
+  autoBrakeRearBaseCm: number
+  autoBrakeRearSlopeCmPerMs: number
+  autoBrakeRearMinSpeedCmPs: number
 }
 
 export interface WifiNetwork {

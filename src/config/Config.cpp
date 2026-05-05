@@ -52,10 +52,13 @@ void loadConfig(Config& out) {
     out.imuInvertY               = p.getBool("imu_invy", false);
     out.imuInvertZ               = p.getBool("imu_invz", false);
 
-    out.autoBrakeEnabled         = p.getBool  ("obr_en",    false);
-    out.autoBrakeBaseCm          = p.getUShort("obr_base",  20);
-    out.autoBrakeSlopeCmPerMs    = p.getUShort("obr_slope", 30);
-    out.autoBrakeMinSpeedCmPs    = p.getUShort("obr_minv",  10);
+    out.autoBrakeEnabled            = p.getBool  ("obr_en",     false);
+    out.autoBrakeFrontBaseCm        = p.getUShort("obr_fbase",  20);
+    out.autoBrakeFrontSlopeCmPerMs  = p.getUShort("obr_fslope", 30);
+    out.autoBrakeFrontMinSpeedCmPs  = p.getUShort("obr_fminv",  10);
+    out.autoBrakeRearBaseCm         = p.getUShort("obr_rbase",  20);
+    out.autoBrakeRearSlopeCmPerMs   = p.getUShort("obr_rslope", 30);
+    out.autoBrakeRearMinSpeedCmPs   = p.getUShort("obr_rminv",  10);
 
     p.end();
 }
@@ -92,10 +95,13 @@ bool saveConfig(const Config& cfg) {
     p.putBool  ("imu_invy", cfg.imuInvertY);
     p.putBool  ("imu_invz", cfg.imuInvertZ);
 
-    p.putBool  ("obr_en",    cfg.autoBrakeEnabled);
-    p.putUShort("obr_base",  cfg.autoBrakeBaseCm);
-    p.putUShort("obr_slope", cfg.autoBrakeSlopeCmPerMs);
-    p.putUShort("obr_minv",  cfg.autoBrakeMinSpeedCmPs);
+    p.putBool  ("obr_en",     cfg.autoBrakeEnabled);
+    p.putUShort("obr_fbase",  cfg.autoBrakeFrontBaseCm);
+    p.putUShort("obr_fslope", cfg.autoBrakeFrontSlopeCmPerMs);
+    p.putUShort("obr_fminv",  cfg.autoBrakeFrontMinSpeedCmPs);
+    p.putUShort("obr_rbase",  cfg.autoBrakeRearBaseCm);
+    p.putUShort("obr_rslope", cfg.autoBrakeRearSlopeCmPerMs);
+    p.putUShort("obr_rminv",  cfg.autoBrakeRearMinSpeedCmPs);
 
     p.end();
     return true;

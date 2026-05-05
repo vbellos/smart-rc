@@ -143,42 +143,82 @@ function MotorsTab({ cfg, save, saving }: {
       </div>
 
       <div>
-        <div className="caption mb-2">Auto-brake (front-distance obstacle gate)</div>
+        <div className="caption mb-2">Auto-brake (obstacle distance gate)</div>
         <p className="text-xs text-ink-400 mb-3">
-          Trigger distance scales with forward speed:&nbsp;
-          <span className="tabular-nums text-ink-200">
-            {local.autoBrakeBaseCm} + {local.autoBrakeSlopeCmPerMs}·v cm
-          </span>
-          &nbsp;(at v m/s). Reverse + steering remain available while engaged.
+          Each side's trigger distance scales linearly with the speed
+          travelling toward its sensor: <span className="tabular-nums text-ink-200">
+            base + slope·v
+          </span>. Front gates forward drive; rear gates reverse. The
+          opposite direction stays available so the driver can back away.
         </p>
-        <div className="grid gap-3 md:grid-cols-2">
+        <div className="grid gap-3 md:grid-cols-2 mb-5">
           <ToggleField
             label="Enable auto-brake"
-            sub="Brakes automatically when front sensor sees a close obstacle while moving forward."
+            sub="Master switch — applies to both front and rear gates."
             checked={local.autoBrakeEnabled}
             onChange={(b) => setLocal({ ...local, autoBrakeEnabled: b })}
           />
         </div>
-        <div className={`grid gap-6 md:grid-cols-3 mt-4 transition-opacity
+
+        <div className={`space-y-5 transition-opacity
                         ${local.autoBrakeEnabled ? 'opacity-100' : 'opacity-50'}`}>
-          <SliderField
-            label="Base distance (cm)"
-            value={local.autoBrakeBaseCm} min={5} max={150}
-            onChange={(v) => setLocal({ ...local, autoBrakeBaseCm: v })}
-            sub="Trigger distance at zero speed."
-          />
-          <SliderField
-            label="Speed slope (cm per m/s)"
-            value={local.autoBrakeSlopeCmPerMs} min={0} max={150}
-            onChange={(v) => setLocal({ ...local, autoBrakeSlopeCmPerMs: v })}
-            sub="Extra cm of stopping room per (m/s) of vx."
-          />
-          <SliderField
-            label="Min activation speed (cm/s)"
-            value={local.autoBrakeMinSpeedCmPs} min={0} max={100}
-            onChange={(v) => setLocal({ ...local, autoBrakeMinSpeedCmPs: v })}
-            sub="Below this forward speed, ignore the sensor."
-          />
+          <div className="rounded-xl ring-1 ring-[#26262e] bg-[#0c0c0e] p-4">
+            <div className="flex items-baseline justify-between mb-3">
+              <h4 className="text-sm font-medium text-white">Front (forward drive)</h4>
+              <span className="text-xs text-ink-500 tabular-nums">
+                trigger = {local.autoBrakeFrontBaseCm} + {local.autoBrakeFrontSlopeCmPerMs}·v cm
+              </span>
+            </div>
+            <div className="grid gap-6 md:grid-cols-3">
+              <SliderField
+                label="Base distance (cm)"
+                value={local.autoBrakeFrontBaseCm} min={5} max={150}
+                onChange={(v) => setLocal({ ...local, autoBrakeFrontBaseCm: v })}
+                sub="Trigger distance at zero forward speed."
+              />
+              <SliderField
+                label="Speed slope (cm per m/s)"
+                value={local.autoBrakeFrontSlopeCmPerMs} min={0} max={150}
+                onChange={(v) => setLocal({ ...local, autoBrakeFrontSlopeCmPerMs: v })}
+                sub="Extra cm of stopping room per (m/s) forward."
+              />
+              <SliderField
+                label="Min activation speed (cm/s)"
+                value={local.autoBrakeFrontMinSpeedCmPs} min={0} max={100}
+                onChange={(v) => setLocal({ ...local, autoBrakeFrontMinSpeedCmPs: v })}
+                sub="Below this forward speed, ignore the sensor."
+              />
+            </div>
+          </div>
+
+          <div className="rounded-xl ring-1 ring-[#26262e] bg-[#0c0c0e] p-4">
+            <div className="flex items-baseline justify-between mb-3">
+              <h4 className="text-sm font-medium text-white">Rear (reverse drive)</h4>
+              <span className="text-xs text-ink-500 tabular-nums">
+                trigger = {local.autoBrakeRearBaseCm} + {local.autoBrakeRearSlopeCmPerMs}·v cm
+              </span>
+            </div>
+            <div className="grid gap-6 md:grid-cols-3">
+              <SliderField
+                label="Base distance (cm)"
+                value={local.autoBrakeRearBaseCm} min={5} max={150}
+                onChange={(v) => setLocal({ ...local, autoBrakeRearBaseCm: v })}
+                sub="Trigger distance at zero reverse speed."
+              />
+              <SliderField
+                label="Speed slope (cm per m/s)"
+                value={local.autoBrakeRearSlopeCmPerMs} min={0} max={150}
+                onChange={(v) => setLocal({ ...local, autoBrakeRearSlopeCmPerMs: v })}
+                sub="Extra cm of stopping room per (m/s) reverse."
+              />
+              <SliderField
+                label="Min activation speed (cm/s)"
+                value={local.autoBrakeRearMinSpeedCmPs} min={0} max={100}
+                onChange={(v) => setLocal({ ...local, autoBrakeRearMinSpeedCmPs: v })}
+                sub="Below this reverse speed, ignore the sensor."
+              />
+            </div>
+          </div>
         </div>
       </div>
 

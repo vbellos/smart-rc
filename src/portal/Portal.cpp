@@ -136,12 +136,21 @@ void Portal::handleStatus(AsyncWebServerRequest* req) {
 
     if (deps_.autoBrake) {
         auto ab = doc["auto_brake"].to<JsonObject>();
-        ab["enabled"]     = deps_.autoBrake->enabled();
-        ab["engaged"]     = deps_.autoBrake->engaged();
-        ab["trigger_cm"]  = deps_.autoBrake->triggerCm();
-        const uint16_t d = deps_.autoBrake->distanceCm();
-        if (d == 0xFFFF) ab["distance_cm"] = nullptr;
-        else             ab["distance_cm"] = d;
+        ab["enabled"] = deps_.autoBrake->enabled();
+        ab["engaged"] = deps_.autoBrake->engaged();
+
+        using AB = AutoBrake;
+        auto sideJson = [&](AB::Side side, JsonObject obj, bool active) {
+            obj["active"]     = active;
+            obj["trigger_cm"] = deps_.autoBrake->triggerCm(side);
+            const uint16_t d  = deps_.autoBrake->distanceCm(side);
+            if (d == 0xFFFF) obj["distance_cm"] = nullptr;
+            else             obj["distance_cm"] = d;
+        };
+        sideJson(AB::Front, ab["front"].to<JsonObject>(),
+                 deps_.autoBrake->activeFront());
+        sideJson(AB::Rear,  ab["rear"].to<JsonObject>(),
+                 deps_.autoBrake->activeRear());
     }
 
     // Let every wired sensor contribute under `sensors.*`.
@@ -178,10 +187,13 @@ void Portal::handleGetConfig(AsyncWebServerRequest* req) {
     doc["imuInvertX"]         = c.imuInvertX;
     doc["imuInvertY"]         = c.imuInvertY;
     doc["imuInvertZ"]         = c.imuInvertZ;
-    doc["autoBrakeEnabled"]      = c.autoBrakeEnabled;
-    doc["autoBrakeBaseCm"]       = c.autoBrakeBaseCm;
-    doc["autoBrakeSlopeCmPerMs"] = c.autoBrakeSlopeCmPerMs;
-    doc["autoBrakeMinSpeedCmPs"] = c.autoBrakeMinSpeedCmPs;
+    doc["autoBrakeEnabled"]           = c.autoBrakeEnabled;
+    doc["autoBrakeFrontBaseCm"]       = c.autoBrakeFrontBaseCm;
+    doc["autoBrakeFrontSlopeCmPerMs"] = c.autoBrakeFrontSlopeCmPerMs;
+    doc["autoBrakeFrontMinSpeedCmPs"] = c.autoBrakeFrontMinSpeedCmPs;
+    doc["autoBrakeRearBaseCm"]        = c.autoBrakeRearBaseCm;
+    doc["autoBrakeRearSlopeCmPerMs"]  = c.autoBrakeRearSlopeCmPerMs;
+    doc["autoBrakeRearMinSpeedCmPs"]  = c.autoBrakeRearMinSpeedCmPs;
     sendJsonDoc(req, 200, doc);
 }
 
@@ -218,12 +230,18 @@ void Portal::handlePostConfig(AsyncWebServerRequest* req, JsonVariant& body) {
 
     if (body["autoBrakeEnabled"].is<bool>())
         c.autoBrakeEnabled = body["autoBrakeEnabled"].as<bool>();
-    if (body["autoBrakeBaseCm"].is<int>())
-        c.autoBrakeBaseCm = (uint16_t)constrain((int)body["autoBrakeBaseCm"], 0, 1000);
-    if (body["autoBrakeSlopeCmPerMs"].is<int>())
-        c.autoBrakeSlopeCmPerMs = (uint16_t)constrain((int)body["autoBrakeSlopeCmPerMs"], 0, 500);
-    if (body["autoBrakeMinSpeedCmPs"].is<int>())
-        c.autoBrakeMinSpeedCmPs = (uint16_t)constrain((int)body["autoBrakeMinSpeedCmPs"], 0, 500);
+    if (body["autoBrakeFrontBaseCm"].is<int>())
+        c.autoBrakeFrontBaseCm = (uint16_t)constrain((int)body["autoBrakeFrontBaseCm"], 0, 1000);
+    if (body["autoBrakeFrontSlopeCmPerMs"].is<int>())
+        c.autoBrakeFrontSlopeCmPerMs = (uint16_t)constrain((int)body["autoBrakeFrontSlopeCmPerMs"], 0, 500);
+    if (body["autoBrakeFrontMinSpeedCmPs"].is<int>())
+        c.autoBrakeFrontMinSpeedCmPs = (uint16_t)constrain((int)body["autoBrakeFrontMinSpeedCmPs"], 0, 500);
+    if (body["autoBrakeRearBaseCm"].is<int>())
+        c.autoBrakeRearBaseCm = (uint16_t)constrain((int)body["autoBrakeRearBaseCm"], 0, 1000);
+    if (body["autoBrakeRearSlopeCmPerMs"].is<int>())
+        c.autoBrakeRearSlopeCmPerMs = (uint16_t)constrain((int)body["autoBrakeRearSlopeCmPerMs"], 0, 500);
+    if (body["autoBrakeRearMinSpeedCmPs"].is<int>())
+        c.autoBrakeRearMinSpeedCmPs = (uint16_t)constrain((int)body["autoBrakeRearMinSpeedCmPs"], 0, 500);
 
     const bool ok = saveConfig(c);
 
@@ -240,9 +258,12 @@ void Portal::handlePostConfig(AsyncWebServerRequest* req, JsonVariant& body) {
     sensors::setImuInverts(c.imuInvertX, c.imuInvertY, c.imuInvertZ);
     if (deps_.autoBrake) {
         deps_.autoBrake->setEnabled(c.autoBrakeEnabled);
-        deps_.autoBrake->setParams(c.autoBrakeBaseCm,
-                                   c.autoBrakeSlopeCmPerMs,
-                                   c.autoBrakeMinSpeedCmPs);
+        deps_.autoBrake->setFrontParams(c.autoBrakeFrontBaseCm,
+                                        c.autoBrakeFrontSlopeCmPerMs,
+                                        c.autoBrakeFrontMinSpeedCmPs);
+        deps_.autoBrake->setRearParams (c.autoBrakeRearBaseCm,
+                                        c.autoBrakeRearSlopeCmPerMs,
+                                        c.autoBrakeRearMinSpeedCmPs);
     }
 
     JsonDocument resp;

@@ -1,22 +1,24 @@
+import { useState } from 'react'
 import { PageHeader, ConnectionBadge } from '../components/Layout'
 import { ControlPad } from '../components/ControlPad'
 import { useEvents, useTelemetry } from '../hooks/useTelemetry'
-import { SteerDirName, steerStateLabel } from '../lib/types'
+import { SteerDirName, steerStateLabel, type AutoBrakeState } from '../lib/types'
 import { StatCard } from '../components/StatCard'
-import { Radio } from '../components/Icons'
+import { AlertOctagon, Radio } from '../components/Icons'
 import { useDevice } from '../context/DeviceContext'
 
 export default function DrivePage() {
   const t = useTelemetry()
   const events = useEvents(100)
   const staleDrops = events.filter((e) => e.kind === 'stale_timeout').length
-  const { status } = useDevice()
+  const { status, api } = useDevice()
   const rssi = t?.net.rssi ?? status?.net.rssi ?? 0
   const driveMoving = t?.drive.moving ?? false
   const steerState  = steerStateLabel(t?.steer.state)
   const steerDir    = SteerDirName[t?.steer.lastDir ?? 0]
   const stale       = t?.safety.stale ?? false
   const estop       = t?.safety.emergency ?? false
+  const autoBrake   = t?.auto_brake ?? status?.auto_brake
 
   return (
     <div>
@@ -70,10 +72,96 @@ export default function DrivePage() {
               }
             />
           </div>
+
+          {autoBrake && (
+            <AutoBrakeToggle
+              ab={autoBrake}
+              onToggle={async (next) => {
+                if (!api) return
+                await api.postConfig({ autoBrakeEnabled: next })
+              }}
+            />
+          )}
         </aside>
       </div>
     </div>
   )
+}
+
+/**
+ * Live toggle + status pill for auto-brake. Reads engaged state from
+ * telemetry every push (typically 20 Hz), so the user sees the brake fire
+ * in real time. Click toggles enabled via /api/config — the device
+ * applies it without reboot.
+ */
+function AutoBrakeToggle({ ab, onToggle }: {
+  ab: AutoBrakeState
+  onToggle: (next: boolean) => Promise<void>
+}) {
+  // Optimistic local state — flips on click, then telemetry confirms.
+  // Without this, the toggle feels laggy at low telemetry rates.
+  const [pending, setPending] = useState<boolean | null>(null)
+  const enabled = pending ?? ab.enabled
+  const state: 'off' | 'armed' | 'engaged' =
+    !enabled ? 'off' : ab.engaged ? 'engaged' : 'armed'
+
+  const ring  = state === 'engaged' ? 'ring-rose-500/40 bg-rose-500/5'
+              : state === 'armed'   ? 'ring-lime-500/30 bg-lime-500/5'
+              : 'ring-[#26262e]'
+  const tone  = state === 'engaged' ? 'text-rose-400'
+              : state === 'armed'   ? 'text-lime-400'
+              : 'text-ink-300'
+  const label = state === 'engaged' ? 'ENGAGED'
+              : state === 'armed'   ? 'ARMED'
+              : 'OFF'
+
+  // When engaged, hint which side is blocking — useful so the driver
+  // knows whether to reverse out or steer away.
+  const engagedSide =
+    ab.front.active && ab.rear.active ? 'both'
+    : ab.front.active ? 'front'
+    : ab.rear.active  ? 'rear'
+    : null
+
+  const sub = state === 'engaged'
+    ? `Blocked ${engagedSide ?? ''}`.trim()
+    : state === 'armed'
+      ? `front ${formatDist(ab.front.distance_cm)} · rear ${formatDist(ab.rear.distance_cm)}`
+      : 'Tap to enable'
+
+  async function flip() {
+    const next = !enabled
+    setPending(next)
+    try {
+      await onToggle(next)
+    } finally {
+      // Clear local override once the next telemetry frame arrives;
+      // a 600 ms watchdog covers a slow round-trip.
+      setTimeout(() => setPending(null), 600)
+    }
+  }
+
+  return (
+    <button
+      onClick={flip}
+      className={`text-left p-4 rounded-2xl ring-1 transition-all
+                  hover:ring-white/30 active:scale-[0.99] ${ring}`}>
+      <div className="flex items-center justify-between">
+        <span className="caption">Auto-Brake</span>
+        <AlertOctagon className={`size-4 ${tone}`}/>
+      </div>
+      <div className="mt-2 flex items-baseline gap-2">
+        <span className={`text-2xl font-semibold tabular-nums ${tone}`}>
+          {label}
+        </span>
+      </div>
+      <div className="mt-1 text-xs text-ink-400 truncate">{sub}</div>
+    </button>
+  )
+}
+
+function formatDist(cm: number | null): string {
+  return cm == null ? '—' : `${cm}cm`
 }
 
 function rssiToPct(rssi: number): number {
