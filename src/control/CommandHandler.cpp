@@ -2,16 +2,19 @@
 
 #include <string.h>
 
+#include "control/AutoBrake.h"
 #include "control/Safety.h"
 #include "motors/Drive.h"
 #include "motors/Steering.h"
 
 namespace smartrc {
 
-void CommandHandler::begin(Drive* drive, Steering* steering, Safety* safety) {
-    drive_    = drive;
-    steering_ = steering;
-    safety_   = safety;
+void CommandHandler::begin(Drive* drive, Steering* steering, Safety* safety,
+                           AutoBrake* autoBrake) {
+    drive_     = drive;
+    steering_  = steering;
+    safety_    = safety;
+    autoBrake_ = autoBrake;
 }
 
 Command CommandHandler::parse(const char* action) {
@@ -38,6 +41,14 @@ CommandResult CommandHandler::execute(Command cmd, uint8_t speed) {
 
     switch (cmd) {
         case Command::Forward:
+            // Reject forward into a close obstacle. Heartbeat still counts —
+            // the user is connected and trying, just blocked. Allowing the
+            // heartbeat keeps Safety from going stale and forcing an estop
+            // mid-recovery while the user backs out.
+            if (autoBrake_ && autoBrake_->engaged()) {
+                safety_->notifyHeartbeat();
+                return {false, "auto-brake engaged"};
+            }
             drive_->forward(speed);
             safety_->notifyHeartbeat();
             return {true, "forward"};

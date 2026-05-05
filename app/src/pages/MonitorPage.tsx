@@ -4,9 +4,9 @@ import { StatCard } from '../components/StatCard'
 import { ChartCard, type ChartSeries } from '../components/Chart'
 import { useEvents, useTelemetry } from '../hooks/useTelemetry'
 import { useMultiSeries, useTimeSeries } from '../hooks/useSeries'
-import { SteerDirName, steerStateLabel } from '../lib/types'
+import { SteerDirName, steerStateLabel, type AutoBrakeState } from '../lib/types'
 import { useDevice } from '../context/DeviceContext'
-import { Battery, Compass, Gauge, Radio, Ruler } from '../components/Icons'
+import { AlertOctagon, Battery, Compass, Gauge, Radio, Ruler } from '../components/Icons'
 
 /**
  * Live telemetry + sensor dashboard.
@@ -33,6 +33,7 @@ export default function MonitorPage() {
   const driveMoving = t?.drive.moving ?? false
   const steerState = steerStateLabel(t?.steer.state)
   const steerDir = SteerDirName[t?.steer.lastDir ?? 0]
+  const autoBrake = t?.auto_brake ?? status?.auto_brake
 
   // ---------- Series buffers ---------------------------------------------
 
@@ -109,6 +110,21 @@ export default function MonitorPage() {
           />
         </div>
       </section>
+
+      {/* ------- Auto-brake -----------------------------------------------
+         Front-distance obstacle gate. Visible only when the firmware is
+         publishing auto_brake state (i.e., the feature has been wired on
+         the device). Three states: OFF (disabled), ARMED (enabled but
+         clear), ENGAGED (currently forcing the brake).
+         ----------------------------------------------------------------- */}
+      {autoBrake && (
+        <section className="mb-8">
+          <h2 className="caption mb-3">Safety</h2>
+          <div className="grid gap-3 grid-cols-1 md:grid-cols-2">
+            <AutoBrakeCard ab={autoBrake} />
+          </div>
+        </section>
+      )}
 
       {/* ------- Motion diagnostics ---------------------------------------
          Big signed display of the firmware's estimated forward velocity
@@ -299,6 +315,64 @@ function DistanceCard({ series, data }: {
       min={0} max={300}
       fill
     />
+  )
+}
+
+function AutoBrakeCard({ ab }: { ab: AutoBrakeState }) {
+  const state: 'off' | 'armed' | 'engaged' =
+    !ab.enabled ? 'off' : ab.engaged ? 'engaged' : 'armed'
+  const ring   = state === 'engaged' ? 'ring-rose-500/40'
+               : state === 'armed'   ? 'ring-lime-500/30'
+               : 'ring-[#26262e]'
+  const tone   = state === 'engaged' ? 'text-rose-400'
+               : state === 'armed'   ? 'text-lime-400'
+               : 'text-ink-300'
+  const label  = state === 'engaged' ? 'ENGAGED'
+               : state === 'armed'   ? 'ARMED'
+               : 'OFF'
+  const dist = ab.distance_cm
+  const trig = ab.trigger_cm
+
+  // Visual gauge — distance vs trigger. 0% = at trigger (about to engage),
+  // 100% = far (>= 2× trigger). Helps the user tune the slope while
+  // driving slowly toward an obstacle.
+  const ratio = dist == null ? 1 : Math.max(0, Math.min(1, (dist - trig) / Math.max(1, trig)))
+  const barColor = state === 'engaged' ? 'bg-rose-500'
+                 : state === 'armed'   ? 'bg-lime-400'
+                 : 'bg-ink-600'
+
+  return (
+    <div className={`card p-5 ring-1 ${ring}`}>
+      <div className="flex items-center justify-between">
+        <span className="caption">Auto-brake</span>
+        <AlertOctagon className="size-4 text-ink-400"/>
+      </div>
+      <div className="mt-3 flex items-baseline gap-3">
+        <span className={`text-3xl font-semibold tabular-nums ${tone}`}>{label}</span>
+        {state !== 'off' && (
+          <span className="text-sm text-ink-300 tabular-nums">
+            {dist == null ? '— ' : `${dist} `}
+            <span className="text-ink-500">/ {trig} cm</span>
+          </span>
+        )}
+      </div>
+      {state !== 'off' && (
+        <div className="mt-4">
+          <div className="h-1.5 rounded-full bg-[#1c1c22] overflow-hidden">
+            <div className={`h-full ${barColor} transition-all`}
+                 style={{ width: `${(1 - ratio) * 100}%` }}/>
+          </div>
+          <div className="mt-1.5 flex justify-between text-[10px] text-ink-500">
+            <span>at trigger</span><span>clear</span>
+          </div>
+        </div>
+      )}
+      {state === 'off' && (
+        <p className="text-xs text-ink-400 mt-2">
+          Enable in Configuration → Motors &amp; Safety.
+        </p>
+      )}
+    </div>
   )
 }
 

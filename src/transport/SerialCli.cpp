@@ -53,21 +53,36 @@ void SerialCli::begin(const SerialCliDeps& deps) {
 }
 
 void SerialCli::update() {
-    // Background `imu watch` streamer. Non-blocking — one line per tick
-    // so motor/safety/net loops keep running while we log.
-    if (watchActive_) {
+    // Background `imu watch` / `dist watch` streamer. Non-blocking — one
+    // line per tick so motor/safety/net loops keep running while we log.
+    if (watchKind_ != Watch::None) {
         const uint32_t now = millis();
         if ((int32_t)(now - watchEndMs_) >= 0) {
-            watchActive_ = false;
+            watchKind_ = Watch::None;
             Serial.println("[watch] done");
             printPrompt();
         } else if ((int32_t)(now - watchNextMs_) >= 0) {
-            const smartrc::sensors::Mpu6050& m = smartrc::sensors::imu();
-            const auto& s = m.last();
-            Serial.printf(
-                "%5lu  ax=%+6.2f  ay=%+6.2f  az=%+6.2f  vx=%+6.3f  stat=%d\n",
-                (unsigned long)(now - watchStartMs_),
-                s.ax, s.ay, s.az, m.velocityX(), (int)m.isStationary());
+            if (watchKind_ == Watch::Imu) {
+                const smartrc::sensors::Mpu6050& m = smartrc::sensors::imu();
+                const auto& s = m.last();
+                Serial.printf(
+                    "%5lu  ax=%+6.2f  ay=%+6.2f  az=%+6.2f  vx=%+6.3f  stat=%d\n",
+                    (unsigned long)(now - watchStartMs_),
+                    s.ax, s.ay, s.az, m.velocityX(), (int)m.isStationary());
+            } else {  // Watch::Dist
+                auto& d = smartrc::sensors::distance();
+                using Slot = smartrc::sensors::DistanceSensors::Slot;
+                const bool fp = d.present(Slot::Front);
+                const bool rp = d.present(Slot::Rear);
+                const bool fv = d.valid(Slot::Front);
+                const bool rv = d.valid(Slot::Rear);
+                const uint16_t fmm = fp ? d.lastMm(Slot::Front) : 0;
+                const uint16_t rmm = rp ? d.lastMm(Slot::Rear)  : 0;
+                Serial.printf(
+                    "%5lu  front=%4u mm (v=%d, p=%d)  rear=%4u mm (v=%d, p=%d)\n",
+                    (unsigned long)(now - watchStartMs_),
+                    fmm, (int)fv, (int)fp, rmm, (int)rv, (int)rp);
+            }
             watchNextMs_ += 100;
         }
     }
@@ -129,7 +144,9 @@ void SerialCli::printHelp() {
         "  i2c scan                   probe I2C bus for devices\n"
         "  imu                        print current IMU reading\n"
         "  imu calibrate              re-sample gyro bias (hold still ~2s)\n"
-        "  imu watch [sec]            stream ax/ay/az/vx every 100ms (default 6s)\n");
+        "  imu watch [sec]            stream ax/ay/az/vx every 100ms (default 6s)\n"
+        "  dist                       print front/rear distance snapshot\n"
+        "  dist watch [sec]           stream distance every 100ms (default 6s, max 60)\n");
 }
 
 void SerialCli::processLine(const String& line) {
@@ -172,6 +189,9 @@ void SerialCli::processLine(const String& line) {
     }
     else if (cmd == "imu" && n >= 2 && tok[1] == "watch")  cmdImuWatch(tok, n);
     else if (cmd == "imu")        cmdImu();
+
+    else if (cmd == "dist" && n >= 2 && tok[1] == "watch") cmdDistWatch(tok, n);
+    else if (cmd == "dist")       cmdDist();
 
     else                          Serial.printf("unknown: %s (type 'help')\n", cmd.c_str());
 
@@ -365,13 +385,40 @@ void SerialCli::cmdImuWatch(const String* argv, int argc) {
     watchStartMs_ = now;
     watchNextMs_  = now;          // fire first line immediately
     watchEndMs_   = now + (uint32_t)seconds * 1000;
-    watchActive_  = true;
+    watchKind_    = Watch::Imu;
     Serial.printf(
         "[watch] streaming IMU for %d s — drive or push the car now\n", seconds);
     Serial.println(
         "  ts    ax     ay     az     vx     stat");
     Serial.println(
         "----  ------ ------ ------ ------ ----");
+}
+
+void SerialCli::cmdDist() {
+    auto& d = smartrc::sensors::distance();
+    using Slot = smartrc::sensors::DistanceSensors::Slot;
+    Serial.printf("front  present=%d  valid=%d  mm=%u\n",
+                  (int)d.present(Slot::Front),
+                  (int)d.valid(Slot::Front),
+                  (unsigned)d.lastMm(Slot::Front));
+    Serial.printf("rear   present=%d  valid=%d  mm=%u\n",
+                  (int)d.present(Slot::Rear),
+                  (int)d.valid(Slot::Rear),
+                  (unsigned)d.lastMm(Slot::Rear));
+}
+
+void SerialCli::cmdDistWatch(const String* argv, int argc) {
+    int seconds = (argc >= 3) ? argv[2].toInt() : 6;
+    if (seconds < 1)  seconds = 1;
+    if (seconds > 60) seconds = 60;
+    const uint32_t now = millis();
+    watchStartMs_ = now;
+    watchNextMs_  = now;
+    watchEndMs_   = now + (uint32_t)seconds * 1000;
+    watchKind_    = Watch::Dist;
+    Serial.printf(
+        "[watch] streaming distance for %d s — move an obstacle in/out\n",
+        seconds);
 }
 
 void SerialCli::cmdToken(const String* argv, int argc) {

@@ -52,6 +52,11 @@ void loadConfig(Config& out) {
     out.imuInvertY               = p.getBool("imu_invy", false);
     out.imuInvertZ               = p.getBool("imu_invz", false);
 
+    out.autoBrakeEnabled         = p.getBool  ("obr_en",    false);
+    out.autoBrakeBaseCm          = p.getUShort("obr_base",  20);
+    out.autoBrakeSlopeCmPerMs    = p.getUShort("obr_slope", 30);
+    out.autoBrakeMinSpeedCmPs    = p.getUShort("obr_minv",  10);
+
     p.end();
 }
 
@@ -86,6 +91,11 @@ bool saveConfig(const Config& cfg) {
     p.putBool  ("imu_invx", cfg.imuInvertX);
     p.putBool  ("imu_invy", cfg.imuInvertY);
     p.putBool  ("imu_invz", cfg.imuInvertZ);
+
+    p.putBool  ("obr_en",    cfg.autoBrakeEnabled);
+    p.putUShort("obr_base",  cfg.autoBrakeBaseCm);
+    p.putUShort("obr_slope", cfg.autoBrakeSlopeCmPerMs);
+    p.putUShort("obr_minv",  cfg.autoBrakeMinSpeedCmPs);
 
     p.end();
     return true;

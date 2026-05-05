@@ -4,6 +4,7 @@
 #include <ArduinoJson.h>
 
 #include "config/Config.h"
+#include "control/AutoBrake.h"
 #include "control/CommandHandler.h"
 #include "control/Safety.h"
 #include "motors/Drive.h"
@@ -133,6 +134,16 @@ void Portal::handleStatus(AsyncWebServerRequest* req) {
     safety["emergency"] = deps_.safety->isEmergency();
     safety["stale"]     = deps_.safety->isStale();
 
+    if (deps_.autoBrake) {
+        auto ab = doc["auto_brake"].to<JsonObject>();
+        ab["enabled"]     = deps_.autoBrake->enabled();
+        ab["engaged"]     = deps_.autoBrake->engaged();
+        ab["trigger_cm"]  = deps_.autoBrake->triggerCm();
+        const uint16_t d = deps_.autoBrake->distanceCm();
+        if (d == 0xFFFF) ab["distance_cm"] = nullptr;
+        else             ab["distance_cm"] = d;
+    }
+
     // Let every wired sensor contribute under `sensors.*`.
     sensors::appendSensorsJson(doc.as<JsonObject>());
 
@@ -167,6 +178,10 @@ void Portal::handleGetConfig(AsyncWebServerRequest* req) {
     doc["imuInvertX"]         = c.imuInvertX;
     doc["imuInvertY"]         = c.imuInvertY;
     doc["imuInvertZ"]         = c.imuInvertZ;
+    doc["autoBrakeEnabled"]      = c.autoBrakeEnabled;
+    doc["autoBrakeBaseCm"]       = c.autoBrakeBaseCm;
+    doc["autoBrakeSlopeCmPerMs"] = c.autoBrakeSlopeCmPerMs;
+    doc["autoBrakeMinSpeedCmPs"] = c.autoBrakeMinSpeedCmPs;
     sendJsonDoc(req, 200, doc);
 }
 
@@ -201,6 +216,15 @@ void Portal::handlePostConfig(AsyncWebServerRequest* req, JsonVariant& body) {
     if (body["imuInvertY"].is<bool>()) c.imuInvertY = body["imuInvertY"].as<bool>();
     if (body["imuInvertZ"].is<bool>()) c.imuInvertZ = body["imuInvertZ"].as<bool>();
 
+    if (body["autoBrakeEnabled"].is<bool>())
+        c.autoBrakeEnabled = body["autoBrakeEnabled"].as<bool>();
+    if (body["autoBrakeBaseCm"].is<int>())
+        c.autoBrakeBaseCm = (uint16_t)constrain((int)body["autoBrakeBaseCm"], 0, 1000);
+    if (body["autoBrakeSlopeCmPerMs"].is<int>())
+        c.autoBrakeSlopeCmPerMs = (uint16_t)constrain((int)body["autoBrakeSlopeCmPerMs"], 0, 500);
+    if (body["autoBrakeMinSpeedCmPs"].is<int>())
+        c.autoBrakeMinSpeedCmPs = (uint16_t)constrain((int)body["autoBrakeMinSpeedCmPs"], 0, 500);
+
     const bool ok = saveConfig(c);
 
     // Apply tunables that take effect without reboot.
@@ -214,6 +238,12 @@ void Portal::handlePostConfig(AsyncWebServerRequest* req, JsonVariant& body) {
     deps_.drive->setActiveBrakeMaxMs(c.activeBrakeMaxMs);
     deps_.safety->setTimeout(c.heartbeatTimeoutMs);
     sensors::setImuInverts(c.imuInvertX, c.imuInvertY, c.imuInvertZ);
+    if (deps_.autoBrake) {
+        deps_.autoBrake->setEnabled(c.autoBrakeEnabled);
+        deps_.autoBrake->setParams(c.autoBrakeBaseCm,
+                                   c.autoBrakeSlopeCmPerMs,
+                                   c.autoBrakeMinSpeedCmPs);
+    }
 
     JsonDocument resp;
     resp["ok"]      = ok;

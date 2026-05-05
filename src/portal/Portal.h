@@ -11,6 +11,7 @@ class CommandHandler;
 class Drive;
 class Steering;
 class Safety;
+class AutoBrake;
 
 // Bundles all the dependencies the portal needs to render status,
 // edit config, and dispatch commands.
@@ -21,6 +22,7 @@ struct PortalDeps {
     Drive*           drive;
     Steering*        steering;
     Safety*          safety;
+    AutoBrake*       autoBrake;
 };
 
 class Portal {

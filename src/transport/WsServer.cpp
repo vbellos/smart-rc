@@ -1,6 +1,7 @@
 #include "transport/WsServer.h"
 
 #include "config/Config.h"
+#include "control/AutoBrake.h"
 #include "control/CommandHandler.h"
 #include "control/Safety.h"
 #include "motors/Drive.h"
@@ -229,6 +230,16 @@ void WsServer::buildTelemetryJson(JsonDocument& doc) {
     auto safety = doc["safety"].to<JsonObject>();
     safety["emergency"] = deps_.safety->isEmergency();
     safety["stale"]     = deps_.safety->isStale();
+
+    if (deps_.autoBrake) {
+        auto ab = doc["auto_brake"].to<JsonObject>();
+        ab["enabled"]    = deps_.autoBrake->enabled();
+        ab["engaged"]    = deps_.autoBrake->engaged();
+        ab["trigger_cm"] = deps_.autoBrake->triggerCm();
+        const uint16_t d = deps_.autoBrake->distanceCm();
+        if (d == 0xFFFF) ab["distance_cm"] = nullptr;
+        else             ab["distance_cm"] = d;
+    }
 
     auto net = doc["net"].to<JsonObject>();
     net["mode"] = (int)deps_.network->mode();

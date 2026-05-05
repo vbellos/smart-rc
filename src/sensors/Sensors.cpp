@@ -3,13 +3,15 @@
 #include <math.h>
 
 #include "Pins.h"
+#include "sensors/DistanceSensors.h"
 #include "sensors/Mpu6050.h"
 
 namespace smartrc {
 namespace sensors {
 
 namespace {
-Mpu6050 g_mpu;
+Mpu6050          g_mpu;
+DistanceSensors  g_dist;
 
 // Round to 2 decimals to keep JSON compact on the wire (saves ~4 bytes
 // per field @ 50 Hz × 7 fields ≈ 1.4 kB/s).
@@ -21,10 +23,12 @@ inline float r2(float v) {
 
 void begin() {
     g_mpu.begin(pins::MPU6050_ADDR);
+    g_dist.begin();
 }
 
 void update() {
     g_mpu.update();
+    g_dist.update();
 }
 
 void setImuInverts(bool x, bool y, bool z) {
@@ -53,12 +57,14 @@ void appendSensorsJson(JsonObject parent) {
         imu["vx"]         = r2(g_mpu.velocityX());
         imu["stationary"] = g_mpu.isStationary();
     }
+    g_dist.appendJson(s);
+
     // Future sensors land here:
-    //   if (g_tof.present()) { ... s["distance"] ... }
     //   if (g_ina.present()) { ... s["battery"]  ... }
 }
 
-Mpu6050& imu() { return g_mpu; }
+Mpu6050&         imu()      { return g_mpu;  }
+DistanceSensors& distance() { return g_dist; }
 
 }  // namespace sensors
 }  // namespace smartrc

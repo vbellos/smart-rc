@@ -143,6 +143,46 @@ function MotorsTab({ cfg, save, saving }: {
       </div>
 
       <div>
+        <div className="caption mb-2">Auto-brake (front-distance obstacle gate)</div>
+        <p className="text-xs text-ink-400 mb-3">
+          Trigger distance scales with forward speed:&nbsp;
+          <span className="tabular-nums text-ink-200">
+            {local.autoBrakeBaseCm} + {local.autoBrakeSlopeCmPerMs}·v cm
+          </span>
+          &nbsp;(at v m/s). Reverse + steering remain available while engaged.
+        </p>
+        <div className="grid gap-3 md:grid-cols-2">
+          <ToggleField
+            label="Enable auto-brake"
+            sub="Brakes automatically when front sensor sees a close obstacle while moving forward."
+            checked={local.autoBrakeEnabled}
+            onChange={(b) => setLocal({ ...local, autoBrakeEnabled: b })}
+          />
+        </div>
+        <div className={`grid gap-6 md:grid-cols-3 mt-4 transition-opacity
+                        ${local.autoBrakeEnabled ? 'opacity-100' : 'opacity-50'}`}>
+          <SliderField
+            label="Base distance (cm)"
+            value={local.autoBrakeBaseCm} min={5} max={150}
+            onChange={(v) => setLocal({ ...local, autoBrakeBaseCm: v })}
+            sub="Trigger distance at zero speed."
+          />
+          <SliderField
+            label="Speed slope (cm per m/s)"
+            value={local.autoBrakeSlopeCmPerMs} min={0} max={150}
+            onChange={(v) => setLocal({ ...local, autoBrakeSlopeCmPerMs: v })}
+            sub="Extra cm of stopping room per (m/s) of vx."
+          />
+          <SliderField
+            label="Min activation speed (cm/s)"
+            value={local.autoBrakeMinSpeedCmPs} min={0} max={100}
+            onChange={(v) => setLocal({ ...local, autoBrakeMinSpeedCmPs: v })}
+            sub="Below this forward speed, ignore the sensor."
+          />
+        </div>
+      </div>
+
+      <div>
         <div className="caption mb-2">IMU mount orientation</div>
         <p className="text-xs text-ink-400 mb-3">
           Toggle these if the IMU board is mounted rotated/flipped.

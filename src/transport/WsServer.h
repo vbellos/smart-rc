@@ -14,6 +14,7 @@ class Drive;
 class Steering;
 class Safety;
 class NetworkManager;
+class AutoBrake;
 
 struct WsServerDeps {
     const Config*   config;
@@ -22,6 +23,7 @@ struct WsServerDeps {
     Steering*       steering;
     Safety*         safety;
     NetworkManager* network;
+    AutoBrake*      autoBrake;
 };
 
 // WebSocket endpoint for realtime control + telemetry. Mounts /ws onto the

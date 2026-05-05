@@ -28,4 +28,16 @@ constexpr uint32_t I2C_FREQ_HZ   = 400000;  // fast-mode; drop to 100000 if flak
 // MPU6050 IMU — default address when AD0 is tied to GND.
 constexpr uint8_t  MPU6050_ADDR  = 0x68;
 
+// VL53L0X time-of-flight distance sensors.
+// All VL53L0X chips boot at I²C 0x29, so multiple sensors on one bus need
+// their XSHUT pins on separate GPIOs: at boot we hold every sensor in
+// reset, then bring them up one at a time and reassign each to a unique
+// address. Even with a single sensor populated, XSHUT must be on a GPIO
+// (not strapped HIGH) so the dance still works when the second sensor is
+// added later without re-routing the harness.
+constexpr uint8_t  TOF_FRONT_XSHUT = 12;
+constexpr uint8_t  TOF_REAR_XSHUT  = 13;
+constexpr uint8_t  TOF_FRONT_ADDR  = 0x30;
+constexpr uint8_t  TOF_REAR_ADDR   = 0x31;
+
 }  // namespace pins

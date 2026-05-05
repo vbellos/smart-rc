@@ -4,6 +4,7 @@
 
 #include "Pins.h"
 #include "config/Config.h"
+#include "control/AutoBrake.h"
 #include "control/CommandHandler.h"
 #include "control/Safety.h"
 #include "motors/Drive.h"
@@ -21,6 +22,7 @@ smartrc::MotorDriver    g_driver;
 smartrc::Drive          g_drive;
 smartrc::Steering       g_steering;
 smartrc::Safety         g_safety;
+smartrc::AutoBrake      g_autoBrake;
 smartrc::CommandHandler g_commands;
 smartrc::NetworkManager g_net;
 smartrc::Portal         g_portal;
@@ -49,9 +51,12 @@ void setup() {
                      g_cfg.defaultSteerPwm);
     g_steering.setInverted(g_cfg.steerInverted);
 
-    // 4. Safety + command pipeline.
+    // 4. Safety + command pipeline. AutoBrake is wired AFTER sensors come
+    //    up (step 5) since it needs the IMU + distance pointers, but the
+    //    CommandHandler captures the pointer now so it can gate forward
+    //    commands once AutoBrake is armed.
     g_safety.begin(&g_drive, &g_steering, g_cfg.heartbeatTimeoutMs);
-    g_commands.begin(&g_drive, &g_steering, &g_safety);
+    g_commands.begin(&g_drive, &g_steering, &g_safety, &g_autoBrake);
 
     // 5. I²C bus + sensors. Wire.begin() must run before sensors::begin()
     //    because the MPU6050 driver talks over it during its probe.
@@ -65,27 +70,39 @@ void setup() {
     g_drive.setActiveBrakePwm(g_cfg.activeBrakePwm);
     g_drive.setActiveBrakeMaxMs(g_cfg.activeBrakeMaxMs);
 
+    // AutoBrake — front-distance obstacle avoidance. Off by default; the
+    // user enables + tunes it from the portal.
+    g_autoBrake.begin(&g_drive,
+                      &smartrc::sensors::distance(),
+                      &smartrc::sensors::imu());
+    g_autoBrake.setEnabled(g_cfg.autoBrakeEnabled);
+    g_autoBrake.setParams(g_cfg.autoBrakeBaseCm,
+                          g_cfg.autoBrakeSlopeCmPerMs,
+                          g_cfg.autoBrakeMinSpeedCmPs);
+
     // 6. Networking — STA with AP fallback.
     g_net.begin(g_cfg);
 
     // 7. Web portal + JSON API.
     g_portal.begin({
-        .config   = &g_cfg,
-        .network  = &g_net,
-        .commands = &g_commands,
-        .drive    = &g_drive,
-        .steering = &g_steering,
-        .safety   = &g_safety,
+        .config    = &g_cfg,
+        .network   = &g_net,
+        .commands  = &g_commands,
+        .drive     = &g_drive,
+        .steering  = &g_steering,
+        .safety    = &g_safety,
+        .autoBrake = &g_autoBrake,
     });
 
     // 8. WebSocket transport on the SAME :80 listener (Phase 2+).
     g_ws.begin(g_portal.server(), {
-        .config   = &g_cfg,
-        .commands = &g_commands,
-        .drive    = &g_drive,
-        .steering = &g_steering,
-        .safety   = &g_safety,
-        .network  = &g_net,
+        .config    = &g_cfg,
+        .commands  = &g_commands,
+        .drive     = &g_drive,
+        .steering  = &g_steering,
+        .safety    = &g_safety,
+        .network   = &g_net,
+        .autoBrake = &g_autoBrake,
     });
 
     // 9. mDNS so mobile/web clients can find us at `<hostname>.local`
@@ -121,7 +138,8 @@ void loop() {
     g_portal.handle();     // no-op since async migration
     g_ws.update();         // telemetry push + event polling
     g_cli.update();        // serial console
-    smartrc::sensors::update();   // pump IMU before Drive reads velocity
+    smartrc::sensors::update();   // pump IMU + distance before others read
+    g_autoBrake.update();         // evaluate obstacle gate; may issue brake
     g_drive.update();             // active-brake tick
     g_steering.update();
     g_safety.update();

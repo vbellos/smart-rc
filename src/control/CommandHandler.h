@@ -7,6 +7,7 @@ namespace smartrc {
 class Drive;
 class Steering;
 class Safety;
+class AutoBrake;
 
 enum class Command : uint8_t {
     Unknown,
@@ -30,7 +31,8 @@ struct CommandResult {
 // subsystem. All accepted commands feed the safety heartbeat.
 class CommandHandler {
 public:
-    void begin(Drive* drive, Steering* steering, Safety* safety);
+    void begin(Drive* drive, Steering* steering, Safety* safety,
+               AutoBrake* autoBrake = nullptr);
 
     CommandResult execute(Command cmd, uint8_t speed = 0);
 
@@ -38,9 +40,10 @@ public:
     static Command parse(const char* action);
 
 private:
-    Drive*    drive_    = nullptr;
-    Steering* steering_ = nullptr;
-    Safety*   safety_   = nullptr;
+    Drive*     drive_     = nullptr;
+    Steering*  steering_  = nullptr;
+    Safety*    safety_    = nullptr;
+    AutoBrake* autoBrake_ = nullptr;
 };
 
 }  // namespace smartrc

@@ -66,9 +66,13 @@ private:
     void cmdI2cScan();
     void cmdImu();
     void cmdImuWatch(const String* argv, int argc);
+    void cmdDist();
+    void cmdDistWatch(const String* argv, int argc);
 
-    // Background streaming state for `imu watch`.
-    bool     watchActive_  = false;
+    // Background streaming state for `imu watch` / `dist watch`. Only one
+    // watcher runs at a time — issuing a second `watch` cancels the prior.
+    enum class Watch : uint8_t { None, Imu, Dist };
+    Watch    watchKind_    = Watch::None;
     uint32_t watchStartMs_ = 0;
     uint32_t watchEndMs_   = 0;
     uint32_t watchNextMs_  = 0;

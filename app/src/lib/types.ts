@@ -23,8 +23,18 @@ export interface DeviceStatus {
     emergency: boolean
     stale: boolean
   }
+  /** Auto-brake (front-distance obstacle gate). Present when configured. */
+  auto_brake?: AutoBrakeState
   /** Future sensors.appendStatusJson() output lives here. */
   sensors?: Record<string, unknown>
+}
+
+export interface AutoBrakeState {
+  enabled: boolean
+  engaged: boolean
+  trigger_cm: number
+  /** Last front reading in cm; null when sensor invalid / absent. */
+  distance_cm: number | null
 }
 
 export interface DeviceConfig {
@@ -53,6 +63,10 @@ export interface DeviceConfig {
   imuInvertZ: boolean
   activeBrakePwm: number
   activeBrakeMaxMs: number
+  autoBrakeEnabled: boolean
+  autoBrakeBaseCm: number
+  autoBrakeSlopeCmPerMs: number
+  autoBrakeMinSpeedCmPs: number
 }
 
 export interface WifiNetwork {
@@ -81,6 +95,8 @@ export interface TelemetryFrame {
   steer: { state: number; lastDir: number }
   safety: { emergency: boolean; stale: boolean }
   net: { mode: number; rssi: number }
+  /** Auto-brake (front-distance obstacle gate). Present when configured. */
+  auto_brake?: AutoBrakeState
   /** Sensor plug-in surface (gyro/accel/distance/battery/...). */
   sensors?: Record<string, unknown>
 }

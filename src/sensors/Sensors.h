@@ -2,6 +2,7 @@
 
 #include <ArduinoJson.h>
 
+#include "sensors/DistanceSensors.h"
 #include "sensors/Mpu6050.h"
 
 // Sensor aggregator. Owns every concrete sensor driver and exposes a
@@ -40,6 +41,10 @@ void appendSensorsJson(JsonObject parent);
 // Direct access for the Serial CLI's `imu` diagnostic command and for
 // Drive which needs to call resetVelocity() after a brake completes.
 Mpu6050& imu();
+
+// Direct access for AutoBrake (reads front distance in mm) and the Serial
+// CLI's `dist` / `dist watch` diagnostic commands.
+DistanceSensors& distance();
 
 }  // namespace sensors
 }  // namespace smartrc
