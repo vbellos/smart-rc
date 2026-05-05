@@ -25,14 +25,27 @@ constexpr SlotConfig kSlots[DistanceSensors::kCount] = {
 // pololu library header into DistanceSensors.h.
 ::VL53L0X g_drv[DistanceSensors::kCount];
 
-// Continuous-ranging period. ~30 Hz is plenty for an obstacle-detection
-// driving aid and matches the bus headroom we have alongside the IMU.
-constexpr uint16_t kReadIntervalMs = 33;
+// Continuous-ranging period. 20 Hz is plenty for obstacle avoidance and
+// keeps the I²C bandwidth share modest alongside the 50 Hz MPU6050.
+constexpr uint16_t kReadIntervalMs = 50;
 
-// Bound how long readRangeContinuousMillimeters() may block if a fresh
-// sample isn't ready yet — keeps loop() responsive when the sensor is
-// momentarily slow.
-constexpr uint16_t kIoTimeoutMs    = 50;
+// Pololu library's I/O timeout. Generous on purpose: with the
+// non-blocking dataReady-gated read pattern below we should never hit
+// it; this is just a safety net against a stuck sensor wedging the bus.
+constexpr uint16_t kIoTimeoutMs    = 200;
+
+// VL53L0X result-interrupt-status register. Bits 2:0 carry the
+// data-ready / range-status flag — non-zero means a fresh sample is
+// waiting. We poll this ourselves to keep the read non-blocking; the
+// pololu library's readRangeContinuousMillimeters() would tight-loop on
+// the same register and stall loop() while waiting.
+constexpr uint8_t REG_RESULT_INTERRUPT_STATUS = 0x13;
+
+// Consecutive failures before we hard-reset (XSHUT cycle + re-init) the
+// sensor. ~8 misses = ~0.4 s at 20 Hz, long enough to ride out a
+// transient bus glitch but short enough to recover before the user
+// notices a long drop-out.
+constexpr uint8_t kRecoverAfterFails = 8;
 
 }  // namespace
 
@@ -84,20 +97,78 @@ void DistanceSensors::update() {
     for (uint8_t i = 0; i < kCount; ++i) {
         if (!state_[i].present) continue;
 
-        const uint16_t mm = g_drv[i].readRangeContinuousMillimeters();
+        ::VL53L0X& drv = g_drv[i];
 
-        if (g_drv[i].timeoutOccurred()) {
+        // Non-blocking dataReady probe. If the sample isn't ready yet,
+        // skip — keeps loop() snappy. The pololu library's blocking
+        // readRangeContinuousMillimeters() would tight-poll this same
+        // register and stall the whole loop for tens of ms, which is
+        // what was making the sensor "feel" slow / disconnected.
+        const uint8_t status = drv.readReg(REG_RESULT_INTERRUPT_STATUS);
+
+        // last_status is non-zero on any I²C error (NACK, timeout, bus
+        // wedge). Treat as a soft failure — we'll recover after enough
+        // consecutive misses.
+        if (drv.last_status != 0) {
             state_[i].valid = false;
-            // Leave the previous mm reading visible — clients can decide
-            // whether to ignore based on `valid`.
+            if (++state_[i].failCount >= kRecoverAfterFails) recover(i);
             continue;
         }
 
-        state_[i].mm    = mm;
+        // Bits 2:0 carry the data-ready flag. Zero = no fresh sample yet
+        // (we polled before the integration window finished); just hold
+        // off and try again next tick. Don't bump failCount — this is
+        // the *normal* idle-tick outcome.
+        if ((status & 0x07) == 0) continue;
+
+        // Sample is ready: read it. The library still polls internally,
+        // but with the data-ready bit already set it returns essentially
+        // immediately (1-2 register reads, no waiting).
+        const uint16_t mm = drv.readRangeContinuousMillimeters();
+
+        if (drv.timeoutOccurred() || drv.last_status != 0) {
+            state_[i].valid = false;
+            if (++state_[i].failCount >= kRecoverAfterFails) recover(i);
+            continue;
+        }
+
+        state_[i].mm        = mm;
         // 8190 mm is the library's "out of range" sentinel; everything
         // beyond that is noise on a VL53L0X.
-        state_[i].valid = (mm < 8190);
+        state_[i].valid     = (mm < 8190);
+        state_[i].failCount = 0;
     }
+}
+
+void DistanceSensors::recover(uint8_t i) {
+    const SlotConfig& cfg = kSlots[i];
+    Serial.printf("[tof] %s sensor recovering (%u consecutive failures)...\n",
+                  cfg.label, state_[i].failCount);
+
+    // XSHUT-cycle just this sensor — the other one keeps running on its
+    // already-assigned address and is unaffected.
+    digitalWrite(cfg.xshut_pin, LOW);
+    delay(10);
+    digitalWrite(cfg.xshut_pin, HIGH);
+    delay(10);
+
+    ::VL53L0X& drv = g_drv[i];
+    drv.setTimeout(kIoTimeoutMs);
+
+    if (!drv.init()) {
+        Serial.printf("[tof] %s sensor recovery failed — marking absent\n",
+                      cfg.label);
+        state_[i].present = false;
+        state_[i].valid   = false;
+        return;
+    }
+
+    drv.setAddress(cfg.target_addr);
+    drv.startContinuous(kReadIntervalMs);
+    state_[i].failCount = 0;
+    state_[i].valid     = false;  // first reading after re-init isn't ready yet
+    Serial.printf("[tof] %s sensor recovered @ 0x%02X\n",
+                  cfg.label, cfg.target_addr);
 }
 
 bool DistanceSensors::present(Slot s) const {

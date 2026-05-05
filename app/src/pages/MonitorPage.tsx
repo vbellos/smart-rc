@@ -331,11 +331,14 @@ function AutoBrakeCard({ ab }: { ab: AutoBrakeState }) {
               : state === 'armed'   ? 'ARMED'
               : 'OFF'
 
-  // Which side(s) caused the engage, if any.
+  // Defensive: older firmware (or a partial frame mid-flash) may not yet
+  // emit nested front/rear objects. Treat missing as a disabled side.
+  const front: AutoBrakeState['front'] = ab.front ?? EMPTY_SIDE
+  const rear:  AutoBrakeState['rear']  = ab.rear  ?? EMPTY_SIDE
   const engagedSide =
-    ab.front.active && ab.rear.active ? 'both'
-    : ab.front.active ? 'front'
-    : ab.rear.active  ? 'rear'
+    front.active && rear.active ? 'both'
+    : front.active ? 'front'
+    : rear.active  ? 'rear'
     : null
 
   return (
@@ -359,12 +362,16 @@ function AutoBrakeCard({ ab }: { ab: AutoBrakeState }) {
         </p>
       ) : (
         <div className="mt-4 space-y-3">
-          <SideRow label="Front" side={ab.front} engaged={state === 'engaged'} />
-          <SideRow label="Rear"  side={ab.rear}  engaged={state === 'engaged'} />
+          <SideRow label="Front" side={front} engaged={state === 'engaged'} />
+          <SideRow label="Rear"  side={rear}  engaged={state === 'engaged'} />
         </div>
       )}
     </div>
   )
+}
+
+const EMPTY_SIDE: AutoBrakeState['front'] = {
+  active: false, trigger_cm: 0, distance_cm: null,
 }
 
 function SideRow({ label, side, engaged }: {

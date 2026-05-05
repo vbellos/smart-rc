@@ -39,9 +39,17 @@ private:
         bool     present    = false;
         bool     valid      = false;
         uint16_t mm         = 0xFFFF;
+        // Consecutive read failures (timeout or I2C error). After a
+        // threshold we XSHUT-cycle the sensor and re-init to recover from
+        // a soft hang without rebooting the whole MCU.
+        uint8_t  failCount  = 0;
     };
     State    state_[kCount] = {};
     uint32_t lastReadMs_    = 0;
+
+    // XSHUT-cycle + re-init slot `i`. Called when failCount crosses the
+    // recovery threshold. Logs and updates `present` accordingly.
+    void recover(uint8_t i);
 };
 
 }  // namespace sensors

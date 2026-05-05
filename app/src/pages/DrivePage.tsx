@@ -115,18 +115,20 @@ function AutoBrakeToggle({ ab, onToggle }: {
               : state === 'armed'   ? 'ARMED'
               : 'OFF'
 
-  // When engaged, hint which side is blocking — useful so the driver
-  // knows whether to reverse out or steer away.
+  // Defensive: older firmware (or a partial frame mid-flash) may not yet
+  // emit nested front/rear objects. Treat missing as "no signal".
+  const front = ab.front
+  const rear  = ab.rear
   const engagedSide =
-    ab.front.active && ab.rear.active ? 'both'
-    : ab.front.active ? 'front'
-    : ab.rear.active  ? 'rear'
+    front?.active && rear?.active ? 'both'
+    : front?.active ? 'front'
+    : rear?.active  ? 'rear'
     : null
 
   const sub = state === 'engaged'
     ? `Blocked ${engagedSide ?? ''}`.trim()
     : state === 'armed'
-      ? `front ${formatDist(ab.front.distance_cm)} · rear ${formatDist(ab.rear.distance_cm)}`
+      ? `front ${formatDist(front?.distance_cm ?? null)} · rear ${formatDist(rear?.distance_cm ?? null)}`
       : 'Tap to enable'
 
   async function flip() {
