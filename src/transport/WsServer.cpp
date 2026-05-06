@@ -240,6 +240,7 @@ void WsServer::buildTelemetryJson(JsonDocument& doc) {
         using AB = AutoBrake;
         auto sideJson = [&](AB::Side side, JsonObject obj, bool active) {
             obj["active"]     = active;
+            obj["bypassed"]   = deps_.autoBrake->bypassed(side);
             obj["trigger_cm"] = deps_.autoBrake->triggerCm(side);
             const uint16_t d  = deps_.autoBrake->distanceCm(side);
             if (d == 0xFFFF) obj["distance_cm"] = nullptr;

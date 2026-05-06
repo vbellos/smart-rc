@@ -54,6 +54,14 @@ public:
     /** True while EITHER side is forcing the brake. */
     bool engaged() const { return front_.engaged || rear_.engaged; }
 
+    /** Driver wants to push through despite the obstacle — temporarily
+     *  short-circuit the named side's gate for `durationMs`. While the
+     *  bypass is active that side never engages and never calls brake().
+     *  The CommandHandler triggers this after 3 consecutive forward (or
+     *  reverse) taps while the matching gate is engaged. */
+    void bypass(Side which, uint32_t durationMs);
+    bool bypassed(Side which) const;
+
     bool activeFront() const { return front_.engaged; }
     bool activeRear()  const { return rear_.engaged;  }
 
@@ -77,6 +85,11 @@ private:
         bool     engaged       = false;
         uint16_t triggerCm     = 0;
         uint16_t distanceCm    = 0xFFFF;
+        // 3-tap override: millis() value at which the bypass expires.
+        // 0 = no bypass. While bypassEndMs > now, evaluate() forces
+        // engaged=false for this side, so CommandHandler lets drive
+        // commands through.
+        uint32_t bypassEndMs   = 0;
     };
 
     // Evaluate one side. `speedTowardObstacle` is the positive component

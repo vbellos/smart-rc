@@ -40,6 +40,19 @@ void AutoBrake::setEnabled(bool e) {
     }
 }
 
+void AutoBrake::bypass(Side which, uint32_t durationMs) {
+    SideState& s = (which == Front) ? front_ : rear_;
+    s.bypassEndMs = millis() + durationMs;
+    s.engaged     = false;  // drop the gate immediately
+    Serial.printf("[autobrake.%s] bypass armed for %u ms\n",
+                  sideLabel(which), (unsigned)durationMs);
+}
+
+bool AutoBrake::bypassed(Side which) const {
+    const SideState& s = (which == Front) ? front_ : rear_;
+    return s.bypassEndMs != 0 && (int32_t)(millis() - s.bypassEndMs) < 0;
+}
+
 void AutoBrake::update() {
     if (!enabled_ || !drive_ || !dist_ || !imu_) {
         front_.engaged = false;
@@ -76,6 +89,18 @@ void AutoBrake::evaluate(Side which, SideState& s,
                    (uint16_t)((s.slopeCmPerMs * speedTowardObstacle) + 0.5f);
     s.distanceCm = distanceCm;
     const uint16_t releaseCm = (uint16_t)(s.baseCm * kReleaseMultiplier);
+
+    // 3-tap override active for this side — short-circuit. Driver has
+    // explicitly opted in to push through; we surface the most-recent
+    // distance/trigger for telemetry but don't gate the motor.
+    if (s.bypassEndMs != 0) {
+        if ((int32_t)(millis() - s.bypassEndMs) < 0) {
+            s.engaged = false;
+            return;
+        }
+        // Window expired — clear the marker and re-evaluate normally.
+        s.bypassEndMs = 0;
+    }
 
     // Engagement decision differs based on current state — it's the
     // hysteresis band that prevents bouncing between engaged/released

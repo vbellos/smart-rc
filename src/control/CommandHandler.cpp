@@ -1,5 +1,6 @@
 #include "control/CommandHandler.h"
 
+#include <Arduino.h>
 #include <string.h>
 
 #include "control/AutoBrake.h"
@@ -8,6 +9,17 @@
 #include "motors/Steering.h"
 
 namespace smartrc {
+
+namespace {
+// 3-tap override tuning. A burst of three discrete forward (or reverse)
+// taps that all hit the auto-brake gate within kTapResetMs of each other
+// arms a kBypassMs window during which AutoBrake is short-circuited and
+// drive commands flow through. The driver is opting in to push past the
+// sensor's verdict.
+constexpr uint8_t  kTapsToOverride = 3;
+constexpr uint32_t kTapResetMs     = 1500;  // tap counter resets after this idle gap
+constexpr uint32_t kBypassMs       = 3000;  // bypass window after the third tap
+}  // namespace
 
 void CommandHandler::begin(Drive* drive, Steering* steering, Safety* safety,
                            AutoBrake* autoBrake) {
@@ -59,6 +71,11 @@ CommandResult CommandHandler::execute(Command cmd, uint8_t speed) {
         }
     }
 
+    // Capture the last-command snapshot BEFORE we mutate it. Tap
+    // detection compares to whatever came in last (accepted or not).
+    const Command prevCmd = lastCmd_;
+    lastCmd_ = cmd;
+
     switch (cmd) {
         case Command::Forward:
             // Reject drive into a close obstacle on the matching side.
@@ -67,6 +84,12 @@ CommandResult CommandHandler::execute(Command cmd, uint8_t speed) {
             // stale and forcing an estop mid-recovery while the driver
             // backs out the other way.
             if (autoBrake_ && autoBrake_->activeFront()) {
+                // 3-tap override: a fresh tap = Forward following any
+                // non-Forward command. Held-throttle repeats (Forward
+                // after Forward) don't count.
+                if (prevCmd != Command::Forward) {
+                    registerOverrideTap(frontTaps_, /*isFront=*/true);
+                }
                 safety_->notifyHeartbeat();
                 return {false, "auto-brake engaged (front)"};
             }
@@ -75,6 +98,9 @@ CommandResult CommandHandler::execute(Command cmd, uint8_t speed) {
             return {true, "forward"};
         case Command::Reverse:
             if (autoBrake_ && autoBrake_->activeRear()) {
+                if (prevCmd != Command::Reverse) {
+                    registerOverrideTap(rearTaps_, /*isFront=*/false);
+                }
                 safety_->notifyHeartbeat();
                 return {false, "auto-brake engaged (rear)"};
             }
@@ -110,6 +136,28 @@ CommandResult CommandHandler::execute(Command cmd, uint8_t speed) {
         default:
             return {false, "unknown action"};
     }
+}
+
+void CommandHandler::registerOverrideTap(TapState& s, bool isFront) {
+    if (!autoBrake_) return;
+    const uint32_t now = millis();
+    // Idle reset — if the last tap was too long ago, this is the first
+    // tap of a fresh burst.
+    if (now - s.lastTapMs > kTapResetMs) s.count = 0;
+    s.count++;
+    s.lastTapMs = now;
+    Serial.printf("[autobrake] %s override tap %u/%u\n",
+                  isFront ? "front" : "rear", s.count, kTapsToOverride);
+    if (s.count >= kTapsToOverride) {
+        autoBrake_->bypass(isFront ? AutoBrake::Front : AutoBrake::Rear,
+                           kBypassMs);
+        s.count = 0;
+    }
+}
+
+void CommandHandler::resetOverrideTaps() {
+    frontTaps_ = {};
+    rearTaps_  = {};
 }
 
 }  // namespace smartrc

@@ -106,34 +106,46 @@ function AutoBrakeToggle({ ab, onToggle }: {
   // Without this, the toggle feels laggy at low telemetry rates.
   const [pending, setPending] = useState<boolean | null>(null)
   const enabled = pending ?? ab.enabled
-  const state: 'off' | 'armed' | 'engaged' =
-    !enabled ? 'off' : ab.engaged ? 'engaged' : 'armed'
-
-  const ring  = state === 'engaged' ? 'ring-rose-500/40 bg-rose-500/5'
-              : state === 'armed'   ? 'ring-lime-500/30 bg-lime-500/5'
-              : 'ring-[#26262e]'
-  const tone  = state === 'engaged' ? 'text-rose-400'
-              : state === 'armed'   ? 'text-lime-400'
-              : 'text-ink-300'
-  const label = state === 'engaged' ? 'ENGAGED'
-              : state === 'armed'   ? 'ARMED'
-              : 'OFF'
 
   // Defensive: older firmware (or a partial frame mid-flash) may not yet
   // emit nested front/rear objects. Treat missing as "no signal".
   const front = ab.front
   const rear  = ab.rear
+  const bypassed = !!(front?.bypassed || rear?.bypassed)
+
+  // State precedence: bypassed > engaged > armed > off. Bypass wins
+  // because it short-circuits engagement at the firmware level — once
+  // the 3-tap override is armed, the gate is suspended.
+  const state: 'off' | 'armed' | 'engaged' | 'bypassed' =
+    !enabled ? 'off'
+    : bypassed ? 'bypassed'
+    : ab.engaged ? 'engaged'
+    : 'armed'
+
+  const ring  = state === 'bypassed' ? 'ring-amber-500/40 bg-amber-500/5'
+              : state === 'engaged'  ? 'ring-rose-500/40 bg-rose-500/5'
+              : state === 'armed'    ? 'ring-lime-500/30 bg-lime-500/5'
+              : 'ring-[#26262e]'
+  const tone  = state === 'bypassed' ? 'text-amber-400'
+              : state === 'engaged'  ? 'text-rose-400'
+              : state === 'armed'    ? 'text-lime-400'
+              : 'text-ink-300'
+  const label = state === 'bypassed' ? 'OVERRIDE'
+              : state === 'engaged'  ? 'ENGAGED'
+              : state === 'armed'    ? 'ARMED'
+              : 'OFF'
+
   const engagedSide =
     front?.active && rear?.active ? 'both'
     : front?.active ? 'front'
     : rear?.active  ? 'rear'
     : null
 
-  const sub = state === 'engaged'
-    ? `Blocked ${engagedSide ?? ''}`.trim()
-    : state === 'armed'
-      ? `front ${formatDist(front?.distance_cm ?? null)} · rear ${formatDist(rear?.distance_cm ?? null)}`
-      : 'Tap to enable'
+  const sub =
+    state === 'bypassed' ? '3-tap override active (~3s)'
+    : state === 'engaged' ? `Blocked ${engagedSide ?? ''} · tap 3× to override`.trim()
+    : state === 'armed'   ? `front ${formatDist(front?.distance_cm ?? null)} · rear ${formatDist(rear?.distance_cm ?? null)}`
+    : 'Tap to enable'
 
   async function flip() {
     const next = !enabled

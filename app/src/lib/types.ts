@@ -44,6 +44,9 @@ export interface AutoBrakeState {
 export interface AutoBrakeSide {
   /** True if this side is the one currently forcing the brake. */
   active: boolean
+  /** True while the 3-tap override is active for this side: gate is
+   *  suspended for a few seconds so the driver can push past. */
+  bypassed?: boolean
   trigger_cm: number
   /** Last reading in cm; null when sensor invalid / absent. */
   distance_cm: number | null

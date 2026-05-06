@@ -323,22 +323,30 @@ function DistanceCard({ series, data }: {
 }
 
 function AutoBrakeCard({ ab }: { ab: AutoBrakeState }) {
-  const state: 'off' | 'armed' | 'engaged' =
-    !ab.enabled ? 'off' : ab.engaged ? 'engaged' : 'armed'
-  const ring  = state === 'engaged' ? 'ring-rose-500/40'
-              : state === 'armed'   ? 'ring-lime-500/30'
-              : 'ring-[#26262e]'
-  const tone  = state === 'engaged' ? 'text-rose-400'
-              : state === 'armed'   ? 'text-lime-400'
-              : 'text-ink-300'
-  const label = state === 'engaged' ? 'ENGAGED'
-              : state === 'armed'   ? 'ARMED'
-              : 'OFF'
-
   // Defensive: older firmware (or a partial frame mid-flash) may not yet
   // emit nested front/rear objects. Treat missing as a disabled side.
   const front: AutoBrakeState['front'] = ab.front ?? EMPTY_SIDE
   const rear:  AutoBrakeState['rear']  = ab.rear  ?? EMPTY_SIDE
+  const bypassed = !!(front.bypassed || rear.bypassed)
+
+  // State precedence: bypassed > engaged > armed > off.
+  const state: 'off' | 'armed' | 'engaged' | 'bypassed' =
+    !ab.enabled ? 'off'
+    : bypassed ? 'bypassed'
+    : ab.engaged ? 'engaged'
+    : 'armed'
+  const ring  = state === 'bypassed' ? 'ring-amber-500/40'
+              : state === 'engaged'  ? 'ring-rose-500/40'
+              : state === 'armed'    ? 'ring-lime-500/30'
+              : 'ring-[#26262e]'
+  const tone  = state === 'bypassed' ? 'text-amber-400'
+              : state === 'engaged'  ? 'text-rose-400'
+              : state === 'armed'    ? 'text-lime-400'
+              : 'text-ink-300'
+  const label = state === 'bypassed' ? 'OVERRIDDEN'
+              : state === 'engaged'  ? 'ENGAGED'
+              : state === 'armed'    ? 'ARMED'
+              : 'OFF'
   const engagedSide =
     front.active && rear.active ? 'both'
     : front.active ? 'front'
